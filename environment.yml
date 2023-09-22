@@ -1,18 +1,12 @@
-name: mdfptools
+name: mdfp_slim
 channels:
-    - omnia
-    - rdkit
-    - conda-forge
+  - conda-forge
+  - omnia
 dependencies:
-    # conda build dependencies
-    - rdkit
-    #- cairo >=1.16
-    #- bson
-    - openforcefield==0.5.0
-    - mdtraj
-    - setuptools
-    - pip:
-      - nbsphinx_link
-      - recommonmark
-      - nbsphinx
-      - numpydoc
+  - openmm=8.0.0 #latest: 8.1
+  - openff-toolkit=0.14.3 #latest: 0.16.0
+  - parmed=4.1.0 #latest: 4.2.2
+  - mdtraj=1.9.9 #latest 1.10.0
+  - numpy=1.26.0 #latest 1.26.4
+  - python=3.11 #latest 3.12.3
+  - pdbfixer=1.9 #up to date with latest version
