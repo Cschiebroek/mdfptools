@@ -1,7 +1,7 @@
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors
 # from Per_Frame_Property_Extractor import *
-from .Extractor import *
+from Extractor import *
 
 import numpy as np
 from numpy import mean, std, median, isnan, array

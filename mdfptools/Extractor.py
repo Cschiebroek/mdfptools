@@ -2,9 +2,9 @@ import pickle
 from mdtraj.geometry import _geometry
 from mdtraj.utils import ensure_type
 import copy
-from simtk.openmm.app import *
-from simtk.openmm import *
-from simtk.unit import *
+from openmm.app import *
+from openmm import *
+# from unit import *
 import itertools
 import io
 import parmed

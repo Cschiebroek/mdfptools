@@ -1,12 +1,12 @@
 import tempfile
 import parmed
 from simtk import unit
-from simtk.openmm import app
+from openmm import app
 
-from simtk.openmm import *
-from simtk.openmm.app import *
+from openmm import *
+from openmm.app import *
 from mdtraj.reporters import HDF5Reporter
-from .utils import *
+from utils import *
 
 import os
 

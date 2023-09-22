@@ -4,9 +4,9 @@ from functools import partialmethod
 # import contextlib
 
 from simtk import unit  # Unit handling for OpenMM
-from simtk.openmm import *
-from simtk.openmm.app import *
-from simtk.openmm.app import PDBFile
+from openmm import *
+from openmm.app import *
+from openmm.app import PDBFile
 
 try:
     from openff.toolkit.topology import Molecule, Topology
@@ -26,7 +26,7 @@ import numpy as np
 # from mdfptools.utils import get_data_filename
 # from .utils import get_data_filename
 # from utils import get_data_filename
-from .utils import get_data_filename, approximate_volume_by_density
+from utils import get_data_filename, approximate_volume_by_density
 """
 TODOs:
     - proper handling of tip3p water loading
@@ -140,7 +140,7 @@ class BaseParameteriser():
 
                 except ModuleNotFoundError:
                     from openforcefield.utils.toolkits import AmberToolsToolkitWrapper
-                molecule.compute_partial_charges_am1bcc(toolkit_registry=AmberToolsToolkitWrapper())
+                molecule.assign_partial_charges(toolkit_registry=AmberToolsToolkitWrapper(),charge_model="am1bcc")
 
         except Exception as e:
             raise ValueError("Charging Failed : {}".format(e))  # TODO
@@ -290,7 +290,7 @@ class BaseParameteriser():
                 from openff.toolkit.utils import OpenEyeToolkitWrapper
             except ModuleNotFoundError:
                 from openforcefield.utils.toolkits import OpenEyeToolkitWrapper
-            molecule.compute_partial_charges_am1bcc(toolkit_registry=OpenEyeToolkitWrapper())
+            molecule.assign_partial_charges(toolkit_registry=OpenEyeToolkitWrapper(), charge_model="am1bcc")
 
         except Exception as e:
             raise ValueError("Charging Failed : {}".format(e))  # TODO
