@@ -50,7 +50,7 @@ class BaseParameteriser():
         raise NotImplementedError
 
     @classmethod
-    def _rdkit_setter(cls, smiles, **kwargs):
+    def _rdkit_setter(cls, smiles, seed = 0xf00d,**kwargs):
         """
         Prepares an rdkit molecule with 3D coordinates.
 
@@ -70,7 +70,7 @@ class BaseParameteriser():
         mol.UpdatePropertyCache(strict=False)
         mol = Chem.AddHs(mol)
         Chem.GetSSSR(mol)
-        AllChem.EmbedMolecule(mol, enforceChirality=True)
+        AllChem.EmbedMolecule(mol, enforceChirality=True, randomSeed=seed)
 
         return mol
 
@@ -162,7 +162,7 @@ class LiquidParameteriser(BaseParameteriser):
     """
 
     @classmethod  # TODO boxsize packing scale factor should be customary
-    def run(cls, smiles, density, *, allow_undefined_stereo=False, num_lig=100, box_scaleup_factor=1.5, **kwargs):
+    def run(cls, density, *,smiles = None, mol = None, seed = 0xf00d,allow_undefined_stereo=False, num_lig=100, box_scaleup_factor=1.5, **kwargs):
         """
         Parameterisation perfromed with rdkit toolkit.
 
@@ -188,9 +188,16 @@ class LiquidParameteriser(BaseParameteriser):
 
         cls.box_scaleup_factor = box_scaleup_factor
         cls.allow_undefined_stereo = allow_undefined_stereo
+        if mol is None and smiles is None:
+            raise ValueError("smiles or mol must be provided")
+        if mol is not None and smiles is not None:
+            raise ValueError("smiles and mol cannot be both provided")
+        if mol is None and smiles is not None:
+            mol = cls._rdkit_setter(smiles,seed, **kwargs)
+        if mol is not None and smiles is None:
+            smiles = Chem.MolToSmiles(mol)
         cls.smiles = smiles
-       
-        mol = cls._rdkit_setter(smiles, **kwargs)
+
         cls.pdb_filename, cls.ligand_pmd = cls._rdkit_parameteriser(mol, **kwargs)
         return cls._via_helper(density, num_lig, **kwargs)
 
@@ -256,7 +263,7 @@ class SolutionParameteriser(BaseParameteriser):
 
 
     @classmethod
-    def run(cls, smiles, *, solvent_smiles=None, allow_undefined_stereo=False, num_solvent=100, density=None, default_padding=1.25*unit.nanometer, box_scaleup_factor=1.5, **kwargs):
+    def run(cls, smiles=None, mol=None,seed = 0xf00d,*, solvent_smiles=None, allow_undefined_stereo=False, num_solvent=100, density=None, default_padding=1.25*unit.nanometer, box_scaleup_factor=1.5, **kwargs):
         """
         Parameterisation perfromed via rdkit.
 
@@ -285,7 +292,12 @@ class SolutionParameteriser(BaseParameteriser):
         """
         # TODO currently only supports one solute molecule
         # sanity checks
-        cls.smiles = smiles
+
+        if smiles is None and mol is None:
+            raise ValueError("smiles or mol must be provided")
+        if smiles is not None and mol is not None:
+            raise ValueError("smiles and mol cannot be both provided")
+            
         cls.allow_undefined_stereo = allow_undefined_stereo
         cls.default_padding = default_padding.value_in_unit(unit.nanometer)
         cls.solvent_smiles = solvent_smiles
@@ -299,19 +311,22 @@ class SolutionParameteriser(BaseParameteriser):
                 raise ValueError("Solvent SMILES missing.")
 
 
+        if mol is None and smiles is not None:
+            mol = cls._rdkit_setter(smiles,seed, **kwargs)
+        if mol is not None and smiles is None:
+            smiles = Chem.MolToSmiles(mol)
+        cls.smiles = smiles
 
-
-        mol = cls._rdkit_setter(smiles, **kwargs)
         # mol = cls._rdkit_charger(mol)
         cls.pdb_filename, cls.ligand_pmd = cls._rdkit_parameteriser(mol, **kwargs)
         if solvent_smiles:
-            mol = cls._rdkit_setter(solvent_smiles, **kwargs)
+            mol = cls._rdkit_setter(solvent_smiles,seed, **kwargs)
             cls.solvent_pdb_filename, cls.solvent_pmd = cls._rdkit_parameteriser(mol, **kwargs)
 
 
         if cls.solvent_pmd is None:
             try:
-                cls.solvent_pmd = parmed.load_file("../mdfptools/data/tip3p.prmtop")
+                cls.solvent_pmd = parmed.load_file("../mdfptools/data/tip3p.prmtop") #TODO get this path instead of giving absolute path
 
 
             except ValueError:
@@ -427,7 +442,7 @@ class VaccumParameteriser(BaseParameteriser):
     
 
     @classmethod
-    def via_rdkit(cls, smiles, allow_undefined_stereo=False, **kwargs):
+    def via_rdkit(cls, seed =0xf00d , smiles = None, mol = None,allow_undefined_stereo=False, **kwargs):
         """
         Parameterisation perfromed via rdkit toolkit.
 
@@ -443,9 +458,17 @@ class VaccumParameteriser(BaseParameteriser):
         system_pmd : parmed.structure
             The parameterised system as parmed object
         """
+        if mol is None and smiles is None:
+            raise ValueError("smiles or mol must be provided")
+        if mol is not None and smiles is not None:
+            raise ValueError("smiles and mol cannot be both provided")
+        if mol is None and smiles is not None:
+            mol = cls._rdkit_setter(smiles,seed, **kwargs)
+        if mol is not None and smiles is None:
+            smiles = Chem.MolToSmiles(mol)
+
         cls.smiles = smiles
         cls.allow_undefined_stereo = allow_undefined_stereo
-        mol = cls._rdkit_setter(smiles, **kwargs)
         # mol = cls._rdkit_charger(mol)
         cls.pdb_filename, cls.ligand_pmd = cls._rdkit_parameteriser(mol, **kwargs)
 
