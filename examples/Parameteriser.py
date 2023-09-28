@@ -64,13 +64,20 @@ class BaseParameteriser():
         mol : rdkit.Chem.Mol
         """
         from rdkit.Chem import AllChem
+        from rdkit.Chem import rdmolops
 
+
+        seed = 0xf00d
         mol = Chem.MolFromSmiles(smiles, sanitize=False)
-        mol.SetProp("_Name", smiles)
-        mol.UpdatePropertyCache(strict=False)
         mol = Chem.AddHs(mol)
-        Chem.GetSSSR(mol)
         AllChem.EmbedMolecule(mol, enforceChirality=True, randomSeed=seed)
+        rdmolops.AssignStereochemistryFrom3D(mol)
+        used_smiles = Chem.MolToSmiles(mol, isomericSmiles=True)
+        mol.SetProp("_Name", used_smiles)
+        mol.UpdatePropertyCache(strict=False)
+
+        # print(Chem.MolToMolBlock(mol),file=open(f'{hash_code}_{seed}.mol','w+')) #TODO save when you know how to name it
+
 
         return mol
 
@@ -82,7 +89,7 @@ class BaseParameteriser():
             try:
                 return ForceField(kwargs['ff_path'], allow_cosmetic_attributes=True)
             except Exception as e:
-                print("Specified forcefield cannot be found. Fallback to default forcefield: OpenFF 2.0.0 force field release (Sage)")
+                print("Specified forcefield cannot be found. Fallback to default forcefield: OpenFF 2.1.0 force field release (Sage)")
         return ForceField("openff_unconstrained-2.1.0.offxml")
 
     @classmethod
@@ -97,12 +104,8 @@ class BaseParameteriser():
         """
         try:
             molecule = Molecule.from_rdkit(mol, allow_undefined_stereo=cls.allow_undefined_stereo)
-            if hasattr(cls, "_ddec_charger"):
-                molecule.partial_charges = unit.Quantity(
-                    np.array(cls._ddec_charger(mol, cls.rf)), unit.elementary_charge)
-            else:
-                from openff.toolkit.utils import AmberToolsToolkitWrapper
-                molecule.assign_partial_charges(toolkit_registry=AmberToolsToolkitWrapper(),partial_charge_method="am1bcc")
+            from openff.toolkit.utils import AmberToolsToolkitWrapper
+            molecule.assign_partial_charges(toolkit_registry=AmberToolsToolkitWrapper(),partial_charge_method="am1bcc")
 
         except Exception as e:
             raise ValueError("Charging Failed : {}".format(e))  # TODO
@@ -156,97 +159,6 @@ class BaseParameteriser():
         return os.path.abspath(path)
 
 
-class LiquidParameteriser(BaseParameteriser):
-    """
-    Parameterisation of liquid box, i.e. multiple replicates of the same molecule
-    """
-
-    @classmethod  # TODO boxsize packing scale factor should be customary
-    def run(cls, density, *,smiles = None, mol = None, seed = 0xf00d,allow_undefined_stereo=False, num_lig=100, box_scaleup_factor=1.5, **kwargs):
-        """
-        Parameterisation perfromed with rdkit toolkit.
-
-        Parameters
-        ----------------
-        smiles : str
-            SMILES string of the molecule to be parametersied
-        density : simtk.unit
-            Density of liquid box
-        allow_undefined_stereo : bool
-            Flag passed to OpenForceField `Molecule` object during parameterisation. When set to False an error is returned if SMILES have no/ambiguous steroechemistry. Default to False here as a sanity check for user.
-        num_lig : int
-            Number of replicates of the molecule
-        box_scaleup_factor : float
-
-
-        Returns
-        ------------------
-        system_pmd : parmed.structure
-            The parameterised system as parmed object
-        """
-       
-
-        cls.box_scaleup_factor = box_scaleup_factor
-        cls.allow_undefined_stereo = allow_undefined_stereo
-        if mol is None and smiles is None:
-            raise ValueError("smiles or mol must be provided")
-        if mol is not None and smiles is not None:
-            raise ValueError("smiles and mol cannot be both provided")
-        if mol is None and smiles is not None:
-            mol = cls._rdkit_setter(smiles,seed, **kwargs)
-        if mol is not None and smiles is None:
-            smiles = Chem.MolToSmiles(mol)
-        cls.smiles = smiles
-
-        cls.pdb_filename, cls.ligand_pmd = cls._rdkit_parameteriser(mol, **kwargs)
-        return cls._via_helper(density, num_lig, **kwargs)
-
-
-    @classmethod
-    def _via_helper(cls, density, num_lig, **kwargs):
-        # TODO !!!!!!!!!!!! approximating volume by density if not possible via rdkit at the moment.
-        """
-        Helper function for via_rdkit
-        Parameters
-        ----------------
-        density : simtk.unit
-            Density of liquid box
-        num_lig : int
-            Number of replicates of the molecule
-
-        Returns
-        ------------------
-        system_pmd : parmed.structure
-            The parameterised system as parmed object
-        """
-        import mdtraj as md  # TODO packmol can accept file name as input too, no need for this really
-        from openmoltools import packmol
-        density = density.value_in_unit(unit.gram / unit.milliliter)
-
-        ligand_mdtraj = md.load(cls.pdb_filename)[0]
-        try:  
-            #box_size = packmol.approximate_volume_by_density([smiles], [num_lig], density=density, 		box_scaleup_factor=1.1, box_buffer=2.0)
-            box_size = packmol.approximate_volume_by_density(
-                [cls.smiles], [num_lig], density=density, 		box_scaleup_factor=cls.box_scaleup_factor, box_buffer=2.0)
-        except:
-            box_size = approximate_volume_by_density(
-                [cls.smiles], [num_lig], density=density, 		box_scaleup_factor=box_scaleup_factor, box_buffer=2.0)
-
-        packmol_out = packmol.pack_box([ligand_mdtraj], [num_lig], box_size=box_size)
-
-        cls.system_pmd = cls.ligand_pmd * num_lig
-        cls.system_pmd.positions = packmol_out.openmm_positions(0)
-        cls.system_pmd.box_vectors = packmol_out.openmm_boxes(0)
-        try:
-            shutil.rmtree("/".join(cls.pdb_filename.split("/")[:-1]))
-            del cls.ligand_pmd
-        except Exception as e:
-            print("Error due to : {}".format(e))
-
-        cls.system_pmd.title = cls.smiles
-        return cls.system_pmd
-
-    via_rdkit = partialmethod(run)
 
 
 class SolutionParameteriser(BaseParameteriser):
@@ -437,44 +349,5 @@ class SolutionParameteriser(BaseParameteriser):
 
     via_rdkit = partialmethod(run)
 
-
-class VaccumParameteriser(BaseParameteriser):
-    
-
-    @classmethod
-    def via_rdkit(cls, seed =0xf00d , smiles = None, mol = None,allow_undefined_stereo=False, **kwargs):
-        """
-        Parameterisation perfromed via rdkit toolkit.
-
-        Parameters
-        ----------------
-        smiles : str
-            SMILES string of the molecule to be parametersied
-        allow_undefined_stereo : bool
-            Flag passed to OpenForceField `Molecule` object during parameterisation. When set to False an error is returned if SMILES have no/ambiguous steroechemistry. Default to False here as a sanity check for user.
-
-        Returns
-        ------------------
-        system_pmd : parmed.structure
-            The parameterised system as parmed object
-        """
-        if mol is None and smiles is None:
-            raise ValueError("smiles or mol must be provided")
-        if mol is not None and smiles is not None:
-            raise ValueError("smiles and mol cannot be both provided")
-        if mol is None and smiles is not None:
-            mol = cls._rdkit_setter(smiles,seed, **kwargs)
-        if mol is not None and smiles is None:
-            smiles = Chem.MolToSmiles(mol)
-
-        cls.smiles = smiles
-        cls.allow_undefined_stereo = allow_undefined_stereo
-        # mol = cls._rdkit_charger(mol)
-        cls.pdb_filename, cls.ligand_pmd = cls._rdkit_parameteriser(mol, **kwargs)
-
-        cls.system_pmd = cls.ligand_pmd
-
-        cls.system_pmd.title = cls.smiles
-        return cls.system_pmd
 
 

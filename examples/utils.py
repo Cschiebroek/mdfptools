@@ -104,9 +104,7 @@ def screen_organic(smiles):
     frags = AllChem.GetMolFrags(m, asMols=True)
     if len(frags) > 1:
         return False
-#     nums = [(f.GetNumAtoms(), f) for f in frags]
-#     nums.sort(reverse=True)
-#     m = nums[0][1]
+
 
     # take only organic molecules
     if not m.HasSubstructMatch(mpatt):
