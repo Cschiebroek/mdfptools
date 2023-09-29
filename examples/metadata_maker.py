@@ -94,3 +94,8 @@ parameters = {"features":['2d_counts','water_intra_crf', 'water_intra_lj', 'wate
               }
 cur.execute("insert into cs_mdfps_schema.mdfp_experiment_metadata values (%s, %s, %s)",(str(Mdfp_Experiment_uuid),str(Md_Experiment_uuid), json.dumps(parameters)))
 cn.commit()
+
+if not os.path.exists(f'topologies/{Md_Experiment_uuid}'):
+    os.makedirs(f'topologies/{Md_Experiment_uuid}')
+if not os.path.exists(f'trajectories/{Md_Experiment_uuid}'):
+    os.makedirs(f'trajectories/{Md_Experiment_uuid}')

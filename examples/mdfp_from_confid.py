@@ -32,13 +32,7 @@ print('Data fetched, creating rdkit molobject...')
 mol = Chem.MolFromMolBlock(d[0][3])
 print('Molobject created, parameterising...')
 rdk_pmd = Parameteriser.SolutionParameteriser.via_rdkit(mol = mol)
-print('Parameterised, creating approriate directories and saving to disk...')
-if not os.path.exists(f'topologies/{Md_Experiment_uuid}'):
-    os.makedirs(f'topologies/{Md_Experiment_uuid}')
-if not os.path.exists(f'trajectories/{Md_Experiment_uuid}'):
-    os.makedirs(f'trajectories/{Md_Experiment_uuid}')
-# if not os.path.exists(f'fingerprints/{Md_Experiment_uuid}'):
-#     os.makedirs(f'fingerprints/{Md_Experiment_uuid}')
+
 pickle.dump(rdk_pmd, open(f"topologies/{Md_Experiment_uuid}/{confid}.pickle", "wb"))
 
 print('Topology saved, simulating...')
