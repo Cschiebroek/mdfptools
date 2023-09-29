@@ -19,6 +19,9 @@ import lwreg
 from lwreg import standardization_lib
 from lwreg import utils
 import getpass
+import datetime
+date = datetime.datetime.now()
+
 
 # Metadata values
 Md_Experiment_uuid = sys.argv[1]
@@ -43,6 +46,7 @@ print("version: ", version)
 print("steps_time: ", steps_time)
 print("Git_repo_name: ", Git_repo_name)
 print("Git_commit_hash: ", Git_commit_hash)
+print("Date: ", date)
 print('------------------------------------\n')
 
 # Save metadata to table mdfp_carl.MD_experiments_metadata 
@@ -64,6 +68,7 @@ config['standardization'] = standardization_lib.RemoveHs()
 config['registerConformers'] = True
 cn = utils._connect(config)
 cur = cn.cursor()
-# cur.execute('insert into cs_mdfps_schema.experimental_data values (%s , %s, %s, %s, %s)',(str(molregno),str(0),json.dumps({}),str(VP),json.dumps(metadata)))
-
+#parse all this metadata to the database    
+# cur.execute("insert into cs_mdfps_schema.md_experiments_metadata values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",(str(Md_Experiment_uuid), str(ff_name), str(ff_version), str(simulation_type), str(md_engine), str(version), str(steps_time), str(Git_repo_name), str(Git_commit_hash), str({}),str(date)))
+# cn.commit()
  
