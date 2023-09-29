@@ -32,8 +32,8 @@ print('Data fetched, creating rdkit molobject...')
 mol = Chem.MolFromMolBlock(d[0][3])
 print('Molobject created, parameterising...')
 rdk_pmd = Parameteriser.SolutionParameteriser.via_rdkit(mol = mol)
-topo_filename = f"topologies/{Md_Experiment_uuid}/{confid}.pickle"
-pickle.dump(rdk_pmd, open(topo_filename, "wb"))
+# topo_filename = f"topologies/{Md_Experiment_uuid}/{confid}.pickle"
+# pickle.dump(rdk_pmd, open(topo_filename, "wb"))
 
 print('Topology saved, simulating...')
 traj_path = f"trajectories/{Md_Experiment_uuid}"
