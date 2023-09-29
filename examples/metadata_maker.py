@@ -62,30 +62,35 @@ config['registerConformers'] = True
 cn = utils._connect(config)
 cur = cn.cursor()
 cur.execute(f"SELECT md_experiment_uuid FROM cs_mdfps_schema.md_experiments_metadata WHERE ff_name = '{ff_name}' AND ff_version = '{ff_version}' AND simulation_type = '{simulation_type}' AND md_engine = '{md_engine}' AND version = '{version}' AND time = '{steps_time}' AND Git_repo_name = '{Git_repo_name}' AND Git_commit_hash = '{Git_commit_hash}';")
-Md_Experiment_uuid = cur.fetchone()
+Md_Experiment_uuid = cur.fetchone()[0]
+
 if Md_Experiment_uuid is None:
     print('New combination of MD parameters detected. Using a new uuid...')
-    Md_Experiment_uuid = sys.argv[1]
-    print(f'New md_experiment_uuid: {Md_Experiment_uuid}')
+    try:       
+        Md_Experiment_uuid = sys.argv[1]
+        print(f'Using provided uuid: {Md_Experiment_uuid}')
+    except IndexError:
+        Md_Experiment_uuid = uuid.uuid4()
+        print(f'New md_experiment_uuid generated: {Md_Experiment_uuid}')
 else:
     print('Watch out! You already have an entry with this combination of MD parameters. Using the same uuid...')
-#parse all this metadata to the database    
+    print(Md_Experiment_uuid)
+
 print('To continue, please type "yes"')
 answer = input()
 if answer == 'yes':
-    cur.execute("insert into cs_mdfps_schema.md_experiments_metadata values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",(str(Md_Experiment_uuid), str(ff_name), str(ff_version), str(simulation_type), str(md_engine), str(version), str(steps_time), str(Git_repo_name), str(Git_commit_hash), str({}),str(date)))
+    cur.execute("insert into cs_mdfps_schema.md_experiments_metadata values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s)",(str(Md_Experiment_uuid), str(ff_name), str(ff_version), str(simulation_type), str(md_engine), str(version), str(steps_time), str(Git_repo_name), str(Git_commit_hash), str('{}'),str(date)))
     cn.commit()
-    cur.close()
-    cn.close()
     print('Metadata saved to database')
 else:
     print('Exiting')
     exit()
 
 Mdfp_Experiment_uuid = Md_Experiment_uuid
-		
+print(Mdfp_Experiment_uuid)	
 parameters = {"features":['2d_counts','water_intra_crf', 'water_intra_lj', 'water_total_crf', 'water_total_lj', 'water_total_ene' , 'water_rgyr', 'water_sasa']
               ,"statistical_moments:":['mean', 'std', 'median']
               ,"notes":"default parameters"   
               }
-cur.execute("insert into cs_mdfps_schema.mdfp_experiment_metadata values (%s, %s, %s)",(Mdfp_Experiment_uuid, json.dumps(parameters), "default parameters"))
+cur.execute("insert into cs_mdfps_schema.mdfp_experiment_metadata values (%s, %s, %s)",(str(Mdfp_Experiment_uuid),str(Md_Experiment_uuid), json.dumps(parameters)))
+cn.commit()
