@@ -26,7 +26,7 @@ username = 'cschiebroek'
 cn = psycopg2.connect(host=hostname, dbname=dbname, user=username)
 cur = cn.cursor()
 #retrieve conformer from database by confid
-cur.execute(f"SELECT * FROM conformers WHERE conf_id = {confid}")
+cur.execute("SELECT * FROM conformers WHERE conf_id = %s", (confid,))
 d = cur.fetchall()
 print('Data fetched, creating rdkit molobject...')
 mol = Chem.MolFromMolBlock(d[0][3])

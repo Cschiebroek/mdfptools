@@ -238,7 +238,7 @@ class SolutionParameteriser(BaseParameteriser):
 
         if cls.solvent_pmd is None:
             try:
-                cls.solvent_pmd = parmed.load_file("../mdfptools/data/tip3p.prmtop") #TODO get this path instead of giving absolute path
+                cls.solvent_pmd = parmed.load_file("tip3p.prmtop") #TODO get this path instead of giving absolute path
 
 
             except ValueError:
