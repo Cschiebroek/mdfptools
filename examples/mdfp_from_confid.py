@@ -32,11 +32,12 @@ print('Data fetched, creating rdkit molobject...')
 mol = Chem.MolFromMolBlock(d[0][3])
 print('Molobject created, parameterising...')
 rdk_pmd = Parameteriser.SolutionParameteriser.via_rdkit(mol = mol)
-
-pickle.dump(rdk_pmd, open(f"topologies/{Md_Experiment_uuid}/{confid}.pickle", "wb"))
+topo_filename = f"topologies/{Md_Experiment_uuid}/{confid}.pickle"
+pickle.dump(rdk_pmd, open(topo_filename, "wb"))
 
 print('Topology saved, simulating...')
-SolutionSimulator.via_openmm(rdk_pmd, file_name = confid, file_path = f"trajectories/{Md_Experiment_uuid}", 
+traj_path = f"trajectories/{Md_Experiment_uuid}"
+SolutionSimulator.via_openmm(rdk_pmd, file_name = confid, file_path = traj_path, 
                              platform = "CUDA", num_steps = 5000 * 500)
 print('Simulation finished, composing mdfp...')
 traj = md.load(f"trajectories/{Md_Experiment_uuid}/{confid}.h5")
