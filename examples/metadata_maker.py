@@ -81,4 +81,11 @@ if answer == 'yes':
 else:
     print('Exiting')
     exit()
- 
+
+Mdfp_Experiment_uuid = Md_Experiment_uuid
+		
+parameters = {"features":['2d_counts','water_intra_crf', 'water_intra_lj', 'water_total_crf', 'water_total_lj', 'water_total_ene' , 'water_rgyr', 'water_sasa']
+              ,"statistical_moments:":['mean', 'std', 'median']
+              ,"notes":"default parameters"   
+              }
+cur.execute("insert into cs_mdfps_schema.mdfp_experiment_metadata values (%s, %s, %s)",(Mdfp_Experiment_uuid, json.dumps(parameters), "default parameters"))
