@@ -15,25 +15,14 @@ import numpy as np
 confid = sys.argv[1]
 Md_Experiment_uuid = sys.argv[2]
 
+from rdkit.Chem.rdmolfiles import MolFromMolFile
 print('Confid: ', confid)
 print('Md_Experiment_uuid: ', Md_Experiment_uuid)
-
-
-print('Connecting to database...')
-hostname = 'scotland'
-dbname = 'cs_mdfps'
-username = 'cschiebroek'
-cn = psycopg2.connect(host=hostname, dbname=dbname, user=username)
-cur = cn.cursor()
-#retrieve conformer from database by confid
-cur.execute("SELECT * FROM conformers WHERE conf_id = %s", (confid,))
-d = cur.fetchall()
-print('Data fetched, creating rdkit molobject...')
-mol = Chem.MolFromMolBlock(d[0][3])
+mol = MolFromMolFile(f'mols_3d/{confid}.mol') 
 print('Molobject created, parameterising...')
 rdk_pmd = Parameteriser.SolutionParameteriser.via_rdkit(mol = mol)
-# topo_filename = f"topologies/{Md_Experiment_uuid}/{confid}.pickle"
-# pickle.dump(rdk_pmd, open(topo_filename, "wb"))
+topo_filename = f"topologies/{Md_Experiment_uuid}/{confid}.pickle"
+pickle.dump(rdk_pmd, open(topo_filename, "wb"))
 
 print('Topology saved, simulating...')
 traj_path = f"trajectories/{Md_Experiment_uuid}"
@@ -48,6 +37,14 @@ mdfp_dict = {'mdfp':str(mdfp)}
 print('Mdfp composed, saving to database...')
 Mdfp_Experiment_uuid = Md_Experiment_uuid
 mdfp_conf_uuid = uuid.uuid4()
+
+print('Connecting to database...')
+hostname = 'scotland'
+dbname = 'cs_mdfps'
+username = 'cschiebroek'
+cn = psycopg2.connect(host=hostname, dbname=dbname, user=username)
+cur = cn.cursor()
+#retrieve conformer from database by confid
 cur.execute("insert into cs_mdfps_schema.mdfp_experiment_data values (%s, %s, %s,%s,%s)",(str(confid), str(Mdfp_Experiment_uuid), json.dumps(mdfp_dict),str(mdfp_conf_uuid),Md_Experiment_uuid))
 print(mdfp)
 cn.commit()
