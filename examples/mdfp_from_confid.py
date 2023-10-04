@@ -18,7 +18,7 @@ Md_Experiment_uuid = sys.argv[2]
 from rdkit.Chem.rdmolfiles import MolFromMolFile
 print('Confid: ', confid)
 print('Md_Experiment_uuid: ', Md_Experiment_uuid)
-mol = MolFromMolFile(f'mols_3d/{confid}.mol')
+mol = MolFromMolFile(f'mmff_opt_mols/{confid}_mmff.mol')
 print('Molobject created, parameterising...')
 rdk_pmd = Parameteriser.SolutionParameteriser.via_rdkit(mol = mol)
 topo_filename = f"topologies/{Md_Experiment_uuid}/{confid}.pickle"
