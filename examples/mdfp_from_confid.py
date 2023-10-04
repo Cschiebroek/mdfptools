@@ -18,7 +18,7 @@ Md_Experiment_uuid = sys.argv[2]
 from rdkit.Chem.rdmolfiles import MolFromMolFile
 print('Confid: ', confid)
 print('Md_Experiment_uuid: ', Md_Experiment_uuid)
-mol = MolFromMolFile(f'mols_3d/{confid}.mol') 
+mol = MolFromMolFile(f'mols_3d/{confid}.mol')
 print('Molobject created, parameterising...')
 rdk_pmd = Parameteriser.SolutionParameteriser.via_rdkit(mol = mol)
 topo_filename = f"topologies/{Md_Experiment_uuid}/{confid}.pickle"
@@ -26,7 +26,7 @@ pickle.dump(rdk_pmd, open(topo_filename, "wb"))
 
 print('Topology saved, simulating...')
 traj_path = f"trajectories/{Md_Experiment_uuid}"
-SolutionSimulator.via_openmm(rdk_pmd, file_name = confid, file_path = traj_path, 
+SolutionSimulator.via_openmm(rdk_pmd, file_name = confid, file_path = traj_path,
                              platform = "CUDA", num_steps = 5000 * 500)
 print('Simulation finished, composing mdfp...')
 traj = md.load(f"trajectories/{Md_Experiment_uuid}/{confid}.h5")
