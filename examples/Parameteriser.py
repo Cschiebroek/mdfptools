@@ -20,7 +20,7 @@ import os
 import numpy as np
 
 
-from utils import get_data_filename, approximate_volume_by_density
+from utils import approximate_volume_by_density
 
 ##############################################################
 
@@ -331,12 +331,12 @@ class SolutionParameteriser(BaseParameteriser):
 
         if solute_charge > 0:  # add -ve charge
             if cls.cl_ion_pmd is None:
-                cls.cl_ion_pmd = parmed.load_file(get_data_filename("cl.prmtop"))
+                cls.cl_ion_pmd = parmed.load_file("../mdfptools/data/cl.prmtop")
             ion_pmd = cls.cl_ion_pmd * solute_charge
 
         elif solute_charge < 0:  # add +ve charge
             if cls.na_ion_pmd is None:
-                cls.na_ion_pmd = parmed.load_file(get_data_filename("na.prmtop"))
+                cls.na_ion_pmd = parmed.load_file("../mdfptools/data/na.prmtop")
             ion_pmd = cls.na_ion_pmd * abs(solute_charge)
 
         # replace the last few solvent molecules and replace them by the ions
