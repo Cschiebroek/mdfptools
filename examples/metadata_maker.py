@@ -62,7 +62,10 @@ config['registerConformers'] = True
 cn = utils._connect(config)
 cur = cn.cursor()
 cur.execute(f"SELECT md_experiment_uuid FROM cs_mdfps_schema.md_experiments_metadata WHERE ff_name = '{ff_name}' AND ff_version = '{ff_version}' AND simulation_type = '{simulation_type}' AND md_engine = '{md_engine}' AND version = '{version}' AND time = '{steps_time}' AND Git_repo_name = '{Git_repo_name}' AND Git_commit_hash = '{Git_commit_hash}';")
-Md_Experiment_uuid = cur.fetchone()[0]
+try:
+    Md_Experiment_uuid = cur.fetchone()[0]
+except TypeError:
+    Md_Experiment_uuid = None
 
 if Md_Experiment_uuid is None:
     print('New combination of MD parameters detected. Using a new uuid...')
@@ -86,16 +89,16 @@ else:
     print('Exiting')
     exit()
 
-Mdfp_Experiment_uuid = Md_Experiment_uuid
-print(Mdfp_Experiment_uuid)	
-parameters = {"features":['2d_counts','water_intra_crf', 'water_intra_lj', 'water_total_crf', 'water_total_lj', 'water_total_ene' , 'water_rgyr', 'water_sasa']
-              ,"statistical_moments:":['mean', 'std', 'median']
-              ,"notes":"default parameters"   
-              }
-cur.execute("insert into cs_mdfps_schema.mdfp_experiment_metadata values (%s, %s, %s)",(str(Mdfp_Experiment_uuid),str(Md_Experiment_uuid), json.dumps(parameters)))
-cn.commit()
+# Mdfp_Experiment_uuid = Md_Experiment_uuid
+# print(Mdfp_Experiment_uuid)	
+# parameters = {"features":['2d_counts','water_intra_crf', 'water_intra_lj', 'water_total_crf', 'water_total_lj', 'water_total_ene' , 'water_rgyr', 'water_sasa']
+#               ,"statistical_moments:":['mean', 'std', 'median']
+#               ,"notes":"default parameters"   
+#               }
+# cur.execute("insert into cs_mdfps_schema.mdfp_experiment_metadata values (%s, %s, %s)",(str(Mdfp_Experiment_uuid),str(Md_Experiment_uuid), json.dumps(parameters)))
+# cn.commit()
 
-if not os.path.exists(f'topologies/{Md_Experiment_uuid}'):
-    os.makedirs(f'topologies/{Md_Experiment_uuid}')
-if not os.path.exists(f'trajectories/{Md_Experiment_uuid}'):
-    os.makedirs(f'trajectories/{Md_Experiment_uuid}')
+# if not os.path.exists(f'topologies/{Md_Experiment_uuid}'):
+#     os.makedirs(f'topologies/{Md_Experiment_uuid}')
+# if not os.path.exists(f'trajectories/{Md_Experiment_uuid}'):
+#     os.makedirs(f'trajectories/{Md_Experiment_uuid}')
