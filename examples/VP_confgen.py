@@ -35,7 +35,7 @@ def generate_confs(data,whichJob,nJobs):
             m = Chem.AddHs(m)
             t1 = time.time()
             try:
-                rdDistGeom.EmbedMultipleConfs(m,numConfs = numConfs, params = etkdg)    
+                rdDistGeom.EmbedMultipleConfs(m,numConfs = numConfs, params = etkdg)
             except:
                 tpl = (nm, None, 'conformers fail')
             else:
@@ -50,10 +50,6 @@ def generate_confs(data,whichJob,nJobs):
     if len(accum):
         with gzip.open(outfn,'wb+') as outf:
             pickle.dump(accum,outf)
-            
-
-
-
 
 import click
 import logging
@@ -68,8 +64,6 @@ def run_COD(num_jobs,job_index):
         ind =pickle.load(inf)
     print(len(ind))
     generate_confs(ind,job_index,num_jobs)
-
-    
 
 
 if __name__ == '__main__':
