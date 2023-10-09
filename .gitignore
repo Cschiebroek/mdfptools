@@ -107,3 +107,8 @@ examples/mols_3d
 *.tsv
 
 
+*.mol
+*.sdf
+*.gz
+*.pkl
+*.pickle
