@@ -112,3 +112,5 @@ examples/mols_3d
 *.gz
 *.pkl
 *.pickle
+*.csv
+*.out
