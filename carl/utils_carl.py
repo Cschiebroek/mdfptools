@@ -43,12 +43,8 @@ def density_plot(real,prediction,print_stats=True,bounds=None,title=None):
 
     sc = plt.scatter(real, prediction, lw=0, c=z, s=10, alpha = 0.9)
 
-    cbar = plt.colorbar(sc)
-    cbar.ax.tick_params(labelsize=fsize)
-
-
-    plt.xlabel(r'Exp. VP (log10 kPa)', fontsize=fsize)
-    plt.ylabel(r'Predicted VP (log10 kPa)', fontsize=fsize)
+    plt.xlabel(r'Exp. VP (log10 Pa)', fontsize=fsize)
+    plt.ylabel(r'Predicted VP (log10 Pa)', fontsize=fsize)
     plt.setp(ax.get_xticklabels(), fontsize=fsize)
     plt.setp(ax.get_yticklabels(), fontsize=fsize)
     plt.grid(1,"both")
@@ -64,7 +60,7 @@ import xgboost as xgb
 import numpy as np
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import GroupKFold
-def train_pred_xgboost(df,params,splits=5,return_confids=False):
+def train_pred_xgboost(df,params,splits=5,return_confids=False,print_fold_rmses=False):
     gkf = GroupKFold(n_splits=splits)
 
     # Create an empty list to store the indices of each fold
@@ -113,7 +109,8 @@ def train_pred_xgboost(df,params,splits=5,return_confids=False):
             output[2].append(molregnos_test)
             output[3].append(confids_test)
         rmse = np.sqrt(mean_squared_error(y_test, pp, squared=False))
-        print(f"Fold {fold + 1}: RMSE = {rmse}")
+        if print_fold_rmses:
+            print(f"Fold {fold + 1}: RMSE = {rmse}")
     return output
 import py3Dmol
 from rdkit import Chem
@@ -131,3 +128,67 @@ def drawit(ms, p=None, confId=-1, removeHs=True,colors=('cyanCarbon','redCarbon'
                             {'stick':{'colorscheme':colors[i%len(colors)]}})
         p.zoomTo()
         return p.show()
+
+
+
+def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, titles=None):
+    num_plots = len(reals)
+    num_cols = min(num_plots, 3)
+    num_rows = (num_plots + num_cols - 1) // num_cols  # Calculate the number of rows needed for the grid
+    #if you cant devide by 3, but can divide by 2, do two rows
+    if num_plots % 3 != 0 and num_plots % 2 == 0:
+        num_rows = 2
+        num_cols = 2   
+    if num_plots == 4:
+        num_rows = 2
+        num_cols = 2
+    
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(15, 5 * num_rows))
+    axes = axes.flatten()  # Flatten the 2D array of axes to 1D
+    
+    for i in range(num_plots):
+        real = reals[i]
+        prediction = predictions[i]
+        slope_mdfp_d, intercept_mdfp_d, r2, this_rmse, this_mae = getStatValues(real, prediction)
+        if print_stats:
+            print(f'Plot {i + 1} Stats:')
+            print('RMSE: ', this_rmse)
+            print('MAE: ', this_mae)
+            print('R2: ', r2)
+        
+        ax = axes[i]
+        
+        if bounds is None:
+            lower = min(prediction + real) - 2
+            upper = max(prediction + real) + 2
+        else:
+            lower = bounds[0]
+            upper = bounds[1]
+        
+        x = np.linspace(lower, upper, 100)
+        y = slope_mdfp_d * x + intercept_mdfp_d
+        ax.plot(x, y, '-r')
+        ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real), max(prediction + real)], 'k-')
+        ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real) - 1, max(prediction + real) - 1], 'k--')
+        ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real) + 1, max(prediction + real) + 1], 'k--')
+        import statsmodels.api as sm
+        dens_u = sm.nonparametric.KDEMultivariate(data=[real, prediction], var_type='cc', bw='normal_reference')
+        z = dens_u.pdf([real, prediction])
+
+        sc = ax.scatter(real, prediction, lw=0, c=z, s=10, alpha=0.9)
+
+        ax.set_xlabel(r'Exp. VP (log10 Pa)', fontsize=14)
+        ax.set_ylabel(r'Predicted VP (log10 Pa)', fontsize=14)
+        ax.grid(True, which="both")
+        ax.axis([lower, upper, lower, upper])
+        ax.text(0.05, 0.95, f'RMSE: {this_rmse:.2f}\nMAE: {this_mae:.2f}\nR2: {r2:.2f}', transform=ax.transAxes, fontsize=14, verticalalignment='top')
+        if titles is not None and len(titles) > i:
+            ax.set_title(titles[i], fontsize=14)
+        ax.set_aspect('equal', 'box')
+    
+    # Remove any unused subplots
+    for i in range(num_plots, len(axes)):
+        fig.delaxes(axes[i])
+    
+    plt.tight_layout()
+    plt.show()
