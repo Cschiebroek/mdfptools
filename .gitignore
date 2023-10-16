@@ -114,3 +114,4 @@ examples/mols_3d
 *.pickle
 *.csv
 *.out
+*.txt
