@@ -1,11 +1,27 @@
-from sklearn.model_selection import KFold
 import numpy as np
-import tqdm
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from functools import reduce
 from scipy.stats import linregress
 import matplotlib.pyplot as plt
+from rdkit import Chem
+from rdkit.Chem.Draw import IPythonConsole
+import json
+
+import psycopg2
+import pandas as pd
+import psycopg2
+
+import xgboost as xgb
+import numpy as np
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import GroupKFold, KFold
+from sklearn.preprocessing import StandardScaler
+
+import pickle
+
+hostname = 'scotland'
+dbname = 'cs_mdfps'
+username = 'cschiebroek'
 
 
 
@@ -56,10 +72,7 @@ def density_plot(real,prediction,print_stats=True,bounds=None,title=None):
     ax.set_aspect('equal', 'box')
     plt.show()
 
-import xgboost as xgb
-import numpy as np
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import GroupKFold
+
 def train_pred_xgboost(df,params,splits=5,return_confids=False,print_fold_rmses=False):
     gkf = GroupKFold(n_splits=splits)
 
@@ -131,7 +144,7 @@ def drawit(ms, p=None, confId=-1, removeHs=True,colors=('cyanCarbon','redCarbon'
 
 
 
-def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, titles=None):
+def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, titles=None,global_title=None):
     num_plots = len(reals)
     num_cols = min(num_plots, 3)
     num_rows = (num_plots + num_cols - 1) // num_cols  # Calculate the number of rows needed for the grid
@@ -189,6 +202,110 @@ def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, tit
     # Remove any unused subplots
     for i in range(num_plots, len(axes)):
         fig.delaxes(axes[i])
+    if global_title is not None:
+        fig.suptitle(global_title, fontsize=16)
     
     plt.tight_layout()
     plt.show()
+
+
+def get_mdfps(which='all'):
+    """
+    Returns dataframe with mdfp and VP for specified conformers.
+    Options: 'all', 'one_5ns', 'five_5ns'
+    """
+    cn = psycopg2.connect(host=hostname, dbname=dbname, user=username)
+    cur = cn.cursor()
+
+    # Define the SQL query to perform the joins with schema qualification
+    sql_query = '''
+        SELECT cs_mdfps_schema.mdfp_experiment_data.conf_id AS confid,
+            public.conformers.molregno,
+            cs_mdfps_schema.mdfp_experiment_data.mdfp,
+            cs_mdfps_schema.experimental_data.vp_log10Pa
+        FROM cs_mdfps_schema.mdfp_experiment_data
+        INNER JOIN public.conformers
+        ON cs_mdfps_schema.mdfp_experiment_data.conf_id = public.conformers.conf_id
+        INNER JOIN cs_mdfps_schema.confid_data
+        ON cs_mdfps_schema.mdfp_experiment_data.conf_id = cs_mdfps_schema.confid_data.conf_id
+        INNER JOIN cs_mdfps_schema.experimental_data
+        ON public.conformers.molregno = cs_mdfps_schema.experimental_data.molregno
+    '''
+    if which == 'all':
+        pass
+    elif which == 'one_5ns':
+        sql_query = sql_query + " WHERE cs_mdfps_schema.confid_data.confgen_uuid = '906589dd-76fa-4d7b-aa9f-1ee90abe3835'"
+    elif which == 'five_5ns':
+        sql_query = sql_query + " WHERE cs_mdfps_schema.confid_data.confgen_uuid = '11093a30-b6d0-4e3f-a22b-8dcad60d6a11'"
+    else:
+        raise ValueError('Invalid value for which')
+
+    # Execute the SQL query
+    cur.execute(sql_query)
+
+    # Fetch the results if needed
+    results = cur.fetchall()
+    print(f'{len(results)} results fetched')
+
+    # Print the column names
+    column_names = [desc[0] for desc in cur.description]
+    print(column_names)
+    confids = [r[0] for r in results]
+    molregnos = [r[1] for r in results]
+    mdfps = [json.loads(r[2]['mdfp']) for r in results]
+    vps = [r[3] for r in results]
+    df_mdfps = pd.DataFrame({'confid': confids, 'molregno': molregnos, 'mdfp': mdfps, 'vp': vps})
+    cur.close()
+    cn.close()
+    return df_mdfps
+
+def print_package_versions():
+    import openff.toolkit
+    import openmm
+    import rdkit
+    print("ff_name: openff_unconstrained-2.1.0.offxml")
+    print("ff_version: ", openff.toolkit.__version__)
+    print("simulation_type: tMD water solution")
+    print("md_engine: openMM")
+    print("version: ", openmm.__version__)
+    print("steps_time: 5.0")
+    print("rdkit version: ", rdkit.__version__)
+
+def train_pred_xgboost_2d(df,params,X_features,y_label,splits=5,scale = True):
+
+    X = df[X_features]
+    X = X.to_numpy()
+    if scale:
+        scaler = StandardScaler()
+        scaler.fit(X)
+        X = scaler.transform(X)
+    y = df[y_label]
+    kf = KFold(n_splits=splits)
+    output = ([], [])
+
+    for train, test in kf.split(X):
+            
+            train_x = np.array(X)[train]
+            train_y = np.array(y)[train]
+    
+            test_x = np.array(X)[test]
+            test_y = np.array(y)[test]
+            
+            dtrain = xgb.DMatrix(train_x, label=train_y)
+            dtest = xgb.DMatrix(test_x, label=test_y)
+
+            model = xgb.train(
+            params,
+            dtrain,
+            num_boost_round=999,
+            evals=[(dtest, "Test")],
+            early_stopping_rounds=10,
+            verbose_eval=False
+            )
+
+            predictions = model.predict(dtest)
+    
+            output[0].append(test_y)
+            output[1].append(predictions)
+
+    return output

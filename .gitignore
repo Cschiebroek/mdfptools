@@ -115,3 +115,5 @@ examples/mols_3d
 *.csv
 *.out
 *.txt
+*/side_experiments/*
+*/unclean/*
