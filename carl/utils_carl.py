@@ -9,7 +9,6 @@ import json
 
 import psycopg2
 import pandas as pd
-import psycopg2
 
 import xgboost as xgb
 import numpy as np
@@ -17,7 +16,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import GroupKFold, KFold
 from sklearn.preprocessing import StandardScaler
 
-import pickle
+from functools import reduce
 
 hostname = 'scotland'
 dbname = 'cs_mdfps'
@@ -73,7 +72,7 @@ def density_plot(real,prediction,print_stats=True,bounds=None,title=None):
     plt.show()
 
 
-def train_pred_xgboost(df,params,splits=5,return_confids=False,print_fold_rmses=False):
+def train_pred_xgboost(df,params,splits=5,return_confids=False,print_fold_rmses=False,average = False):
     gkf = GroupKFold(n_splits=splits)
 
     # Create an empty list to store the indices of each fold
@@ -115,16 +114,26 @@ def train_pred_xgboost(df,params,splits=5,return_confids=False,print_fold_rmses=
 
         output[0].append(y_test)
         output[1].append(pp)
-        if return_confids:  
-            molregnos_test = df['molregno'].iloc[test_idx]
-            confids_test = df['confid'].iloc[test_idx]
-            
-            output[2].append(molregnos_test)
-            output[3].append(confids_test)
+        molregnos_test = df['molregno'].iloc[test_idx]
+        confids_test = df['confid'].iloc[test_idx]
+        
+        output[2].append(molregnos_test)
+        output[3].append(confids_test)
         rmse = np.sqrt(mean_squared_error(y_test, pp, squared=False))
         if print_fold_rmses:
             print(f"Fold {fold + 1}: RMSE = {rmse}")
-    return output
+    vps = reduce(lambda a,b : list(a)+list(b) , output[0])
+    preds = reduce(lambda a,b : list(a)+list(b), output[1])
+    molregnos = reduce(lambda a,b : list(a)+list(b), output[2])
+    confids = reduce(lambda a,b : list(a)+list(b), output[3])
+    if average:
+        df_preds = pd.DataFrame({'vp': vps, 'pred': preds, 'confid': confids, 'molregno': molregnos})
+        df_preds = df_preds.groupby('molregno').mean()
+        preds = df_preds['pred'].tolist()
+        vps = df_preds['vp'].tolist()
+        molregnos = df_preds.index.tolist()
+
+    return vps,preds,molregnos,confids
 import py3Dmol
 from rdkit import Chem
 from rdkit.Chem.Draw import IPythonConsole
@@ -212,7 +221,7 @@ def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, tit
 def get_mdfps(which='all'):
     """
     Returns dataframe with mdfp and VP for specified conformers.
-    Options: 'all', 'one_5ns', 'five_5ns'
+    Options: 'all', 'one_5ns', 'five_5ns','one_25ns'
     """
     cn = psycopg2.connect(host=hostname, dbname=dbname, user=username)
     cur = cn.cursor()
@@ -234,9 +243,11 @@ def get_mdfps(which='all'):
     if which == 'all':
         pass
     elif which == 'one_5ns':
-        sql_query = sql_query + " WHERE cs_mdfps_schema.confid_data.confgen_uuid = '906589dd-76fa-4d7b-aa9f-1ee90abe3835'"
+        sql_query = sql_query + " WHERE cs_mdfps_schema.mdfp_experiment_data.md_experiment_uuid = 'fc57851e-b654-4338-bcdd-faa28ec66253'"
     elif which == 'five_5ns':
-        sql_query = sql_query + " WHERE cs_mdfps_schema.confid_data.confgen_uuid = '11093a30-b6d0-4e3f-a22b-8dcad60d6a11'"
+        sql_query = sql_query + "WHERE cs_mdfps_schema.mdfp_experiment_data.md_experiment_uuid = 'e0f120fb-efa9-4c88-a964-e7b99253027c'"
+    elif which == 'one_25ns':
+        sql_query = sql_query +  "WHERE cs_mdfps_schema.mdfp_experiment_data.md_experiment_uuid = '80b643c8-5bdc-4b63-a12d-6f1ba3f7dd2a'"
     else:
         raise ValueError('Invalid value for which')
 
