@@ -117,3 +117,6 @@ examples/mols_3d
 *.txt
 */side_experiments/*
 */unclean/*
+*/example_data/*
+*.h5
+*.png

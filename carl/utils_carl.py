@@ -24,11 +24,16 @@ username = 'cschiebroek'
 
 
 
-def getStatValues(x,y):
+def getStatValues(x,y,get_spearman=False):
     slope, intercept, r_value, p_value, std_err = linregress(x,y)
     this_rmse = mean_squared_error(np.array(x), np.array(y), squared=False)
     this_mue = mean_absolute_error(np.array(x), np.array(y))
-    return slope, intercept, r_value**2, this_rmse, this_mue
+    if not get_spearman:
+        return slope, intercept, r_value**2, this_rmse, this_mue
+    else:
+        import scipy.stats as stats
+        spearman = stats.spearmanr(x,y)
+        return slope, intercept, r_value**2, this_rmse, this_mue, spearman[0]
 
 def density_plot(real,prediction,print_stats=True,bounds=None,title=None):
     slope_mdfp_d, intercept_mdfp_d, r2, this_rmse, this_mae = getStatValues(real, prediction)
@@ -153,7 +158,7 @@ def drawit(ms, p=None, confId=-1, removeHs=True,colors=('cyanCarbon','redCarbon'
 
 
 
-def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, titles=None,global_title=None):
+def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, titles=None,global_title=None,print_spearman=False):
     num_plots = len(reals)
     num_cols = min(num_plots, 3)
     num_rows = (num_plots + num_cols - 1) // num_cols  # Calculate the number of rows needed for the grid
@@ -171,7 +176,11 @@ def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, tit
     for i in range(num_plots):
         real = reals[i]
         prediction = predictions[i]
-        slope_mdfp_d, intercept_mdfp_d, r2, this_rmse, this_mae = getStatValues(real, prediction)
+        if not print_spearman:
+            slope_mdfp_d, intercept_mdfp_d, r2, this_rmse, this_mae = getStatValues(real, prediction)
+        else:
+            slope_mdfp_d, intercept_mdfp_d, r2, this_rmse, this_mae, spearman = getStatValues(real, prediction,get_spearman=True)
+            print(f'Spearman: {spearman:.2f}')
         if print_stats:
             print(f'Plot {i + 1} Stats:')
             print('RMSE: ', this_rmse)
@@ -203,7 +212,10 @@ def density_plot_multiple(reals, predictions, print_stats=True, bounds=None, tit
         ax.set_ylabel(r'Predicted VP (log10 Pa)', fontsize=14)
         ax.grid(True, which="both")
         ax.axis([lower, upper, lower, upper])
-        ax.text(0.05, 0.95, f'RMSE: {this_rmse:.2f}\nMAE: {this_mae:.2f}\nR2: {r2:.2f}', transform=ax.transAxes, fontsize=14, verticalalignment='top')
+        if not print_spearman:
+            ax.text(0.05, 0.95, f'RMSE: {this_rmse:.2f}\nMAE: {this_mae:.2f}\nR2: {r2:.2f}', transform=ax.transAxes, fontsize=14, verticalalignment='top')
+        else:
+            ax.text(0.05, 0.95, f'RMSE: {this_rmse:.2f}\nMAE: {this_mae:.2f}\nR2: {r2:.2f}\nSpearman: {spearman:.2f}', transform=ax.transAxes, fontsize=14, verticalalignment='top')
         if titles is not None and len(titles) > i:
             ax.set_title(titles[i], fontsize=14)
         ax.set_aspect('equal', 'box')
