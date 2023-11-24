@@ -90,7 +90,7 @@ def train_pred_xgboost(df,params,splits=5,return_confids=False,print_fold_rmses=
     for train_idx, test_idx in gkf.split(df, groups=groups):
         fold_indices.append((train_idx, test_idx))
 
-    y = df['vp']  
+    y = df['vp_log10pa']  
     params = params
     output = ([],[],[],[])
 
@@ -277,7 +277,7 @@ def get_mdfps(which='all'):
     molregnos = [r[1] for r in results]
     mdfps = [json.loads(r[2]['mdfp']) for r in results]
     vps = [r[3] for r in results]
-    df_mdfps = pd.DataFrame({'confid': confids, 'molregno': molregnos, 'mdfp': mdfps, 'vp': vps})
+    df_mdfps = pd.DataFrame({'confid': confids, 'molregno': molregnos, 'mdfp': mdfps, 'vp_log10pa': vps})
     cur.close()
     cn.close()
     return df_mdfps

@@ -2,10 +2,10 @@ import xgboost as xgb
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-df = pd.read_csv('mdfp_and_rdkit_features_all_mols.csv')
+df = pd.read_csv('../data_curation/ochem_reac_intermediate_cleaned.csv')
 RDKit_feature_names = pd.read_pickle('/localhome/cschiebroek/MDFPs/mdfptools/carl/data/outputs/RDKit_2D_descriptors.pkl')
-mdfp_features_no_2d = ['water_intra_crf_mean', 'water_intra_crf_std', 'water_intra_crf_median', 'water_intra_lj_mean', 'water_intra_lj_std', 'water_intra_lj_median', 'water_total_crf_mean', 'water_total_crf_std', 'water_total_crf_median', 'water_total_lj_mean', 'water_total_lj_std', 'water_total_lj_median', 'water_intra_ene_mean', 'water_intra_ene_std', 'water_intra_ene_median', 'water_total_ene_mean', 'water_total_ene_std', 'water_total_ene_median', 'water_rgyr_mean', 'water_rgyr_std', 'water_rgyr_median', 'water_sasa_mean', 'water_sasa_std', 'water_sasa_median']
-X = df[RDKit_feature_names + mdfp_features_no_2d]
+# mdfp_features_no_2d = ['water_intra_crf_mean', 'water_intra_crf_std', 'water_intra_crf_median', 'water_intra_lj_mean', 'water_intra_lj_std', 'water_intra_lj_median', 'water_total_crf_mean', 'water_total_crf_std', 'water_total_crf_median', 'water_total_lj_mean', 'water_total_lj_std', 'water_total_lj_median', 'water_intra_ene_mean', 'water_intra_ene_std', 'water_intra_ene_median', 'water_total_ene_mean', 'water_total_ene_std', 'water_total_ene_median', 'water_rgyr_mean', 'water_rgyr_std', 'water_rgyr_median', 'water_sasa_mean', 'water_sasa_std', 'water_sasa_median']
+X = df[RDKit_feature_names]
 y = df['vp']
 scaler = StandardScaler()
 scaler.fit(X)
@@ -63,6 +63,8 @@ for max_depth, min_child_weight, eta, subsample, colsample_bytree in gridsearch_
     if mean_mae < min_mae:
         min_mae = mean_mae
         best_params = (max_depth,min_child_weight, eta, subsample, colsample_bytree)
-print("Best params: {}, {}, {}, {}, MAE: {}".format(best_params[0], best_params[1], best_params[2], best_params[3], min_mae))
+        print("IntermeidateBest params: {}, {}, {}, {}, MAE: {}".format(best_params[0], best_params[1], best_params[2], best_params[3], min_mae))
+
+print("Final Best params: {}, {}, {}, {}, MAE: {}".format(best_params[0], best_params[1], best_params[2], best_params[3], min_mae))
 
 
