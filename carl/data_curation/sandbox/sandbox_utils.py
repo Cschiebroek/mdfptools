@@ -10,14 +10,14 @@ def train_grouped_kfold(df,params,descriptors,name='test',split_on = 'molregno',
     X = df[split_on].to_numpy()
     output = ([],[],[],[],[],[],[],[],[],[],[])
     for i, (train_index, test_index) in enumerate(rkf.split(X)):
-        train_all = df[df['molregno'].isin(X[train_index])]
-        test_all = df[df['molregno'].isin(X[test_index])]
+        train_all = df[df[split_on].isin(X[train_index])]
+        test_all = df[df[split_on].isin(X[test_index])]
 
         train_X = train_all[descriptors]
         train_y = train_all[y]
         test_X = test_all[descriptors]
         test_y = test_all[y]
-        molregnos_test = test_all['molregno']
+        molregnos_test = test_all[split_on]
 
         if normalize_x:
             scaler = StandardScaler()
@@ -170,3 +170,90 @@ def density_plot_multiple_custom(reals, predictions,molregnos, print_stats=True,
 
  
 
+def density_plot_single_outliers(reals, predictions, molregnos, outliers_reals, outliers_predictions, outliers_molregnos, print_stats=True, bounds=None, title=None, print_spearman=False, name=None):
+    num_plots = 1
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    real = reals[0]
+    prediction = predictions[0]
+    rmses, maes, ebos, kts = [], [], [], []
+    for r, p in zip(real, prediction):
+        RMSE, MAE, EBO, KT = getStatValues_v2(r, p)
+        rmses.append(RMSE)
+        maes.append(MAE)
+        ebos.append(EBO)
+        kts.append(KT)
+
+    rmse_90_low, rmse_90_high = stats.norm.interval(confidence=0.90, 
+                                                   loc=np.mean(rmses), 
+                                                   scale=stats.sem(rmses)) 
+    rmse_mean = np.mean(rmses)
+    mae_90_low, mae_90_high = stats.norm.interval(confidence=0.90,
+                                                 loc=np.mean(maes), 
+                                                 scale=stats.sem(maes))
+    mae_mean = np.mean(maes)
+    ebo_90_low, ebo_90_high = stats.norm.interval(confidence=0.90,
+                                                 loc=np.mean(ebos), 
+                                                 scale=stats.sem(ebos))
+    ebo_mean = np.mean(ebos)
+    kt_90_low, kt_90_high = stats.norm.interval(confidence=0.90,
+                                               loc=np.mean(kts), 
+                                               scale=stats.sem(kts))
+    kt_mean = np.mean(kts)
+
+    molregno = molregnos[0]
+
+    mrn = [item for sublist in molregno for item in sublist]
+    real = [item for sublist in real for item in sublist]
+    prediction = [item for sublist in prediction for item in sublist]
+    # #make df of these three, and average over molregno
+    df = pd.DataFrame({'molregno': mrn, 'real': real, 'prediction': prediction})
+    df = df.groupby('molregno').mean()
+    real = df['real'].tolist()
+    prediction = df['prediction'].tolist()
+
+    ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real), max(prediction + real)], 'k-')
+    ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real) - 1, max(prediction + real) - 1], 'k--')
+    ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real) + 1, max(prediction + real) + 1], 'k--')
+    dens_u = sm.nonparametric.KDEMultivariate(data=[real, prediction], var_type='cc', bw='normal_reference')
+    z = dens_u.pdf([real, prediction])
+
+    sc = ax.scatter(real, prediction, lw=0, c=z, s=10, alpha=0.9)
+
+    # Add outliers
+    # outliers_real = outliers_reals[0]
+    # outliers_prediction = outliers_predictions[0]
+    # outliers_molregno = outliers_molregnos[0]
+    # outliers_real = [item for sublist in outliers_real for item in sublist]
+    # outliers_prediction = [item for sublist in outliers_prediction for item in sublist]
+    ax.scatter(outliers_reals, outliers_predictions, color='red', s=50, alpha=0.9)
+
+    ax.set_xlabel(r'Exp. VP (log10 Pa)', fontsize=14)
+    ax.set_ylabel(r'Predicted VP (log10 Pa)', fontsize=14)
+    ax.grid(True, which="both")
+    
+    if bounds is None:
+        lower = min(prediction + real) - 2
+        upper = max(prediction + real) + 2
+    else:
+        lower = bounds[0]
+        upper = bounds[1]
+
+    ax.axis([lower, upper, lower, upper])
+    
+    if title is not None:
+        ax.set_title(title, fontsize=14)
+    
+    text_box = ax.text(0.05, 0.25, f'RMSE: {rmse_mean:.2f} ({rmse_90_low:.2f}-{rmse_90_high:.2f}) \nMAE: {mae_mean:.2f} ({mae_90_low:.2f}-{mae_90_high:.2f})\nFraction errors < 1: {ebo_mean:.2f} ({ebo_90_low:.2f}-{ebo_90_high:.2f})\nKendalls Tau: {kt_mean:.2f} ({kt_90_low:.2f}-{kt_90_high:.2f})', 
+                transform=ax.transAxes, fontsize=10, verticalalignment='top',
+                bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+    #add custom legend: red = outliers
+    import matplotlib.patches as mpatches
+    red_patch = mpatches.Patch(color='red', label='Difference between values datasets > 0.3')
+    #show legend
+    plt.legend(handles=[red_patch])
+    
+    if name:
+        plt.savefig(name+'.png', dpi=600)
+    plt.show()
