@@ -120,3 +120,4 @@ examples/mols_3d
 */example_data/*
 *.h5
 *.png
+carl/data_curation/QSAR-ready
