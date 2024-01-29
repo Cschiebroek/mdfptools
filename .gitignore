@@ -121,3 +121,4 @@ examples/mols_3d
 *.h5
 *.png
 carl/data_curation/QSAR-ready
+carl/data_curation/QSAR-ready
