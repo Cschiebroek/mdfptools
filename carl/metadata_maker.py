@@ -28,7 +28,7 @@ ff_version = openff.toolkit.__version__
 simulation_type = "tMD water solution"
 md_engine = "openMM"
 version = openmm.__version__
-steps_time = 25.0
+steps_time = 5.0
 Git_repo_name = "mdfptools"
 repo = git.Repo(search_parent_directories=True)
 Git_commit_hash = repo.head.object.hexsha
