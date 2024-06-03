@@ -1,27 +1,15 @@
-import pickle
 from mdtraj.geometry import _geometry
 from mdtraj.utils import ensure_type
 import copy
 from openmm.app import *
 from openmm import *
 # from unit import *
-import itertools
-import io
-import parmed
+
 from math import sqrt
 import mdtraj as md
 import numpy as np
 import tempfile
-
-"""
-TODOs:
-    - update _solute_solvent_split for all the other instances
-    - energy file parsing
-    - tqdm with extraction? nah too many levels of progress tracking
-    - 3d psa calculation function polishing
-    - rgyr, dipole, sasa make sure only include the solute
-    - custom property extractor
-"""
+from parmed import unit as u
 
 
 class BaseExtractor():
@@ -67,7 +55,7 @@ class BaseExtractor():
             """
             parm, traj = parmed_obj, mdtraj_obj
 
-            system = parm.createSystem(nonbondedMethod=CutoffPeriodic, nonbondedCutoff=1.0*nanometer, constraints=AllBonds)
+            system = parm.createSystem(nonbondedMethod=CutoffPeriodic, nonbondedCutoff=1.0*unit.nanometer, constraints=AllBonds)
             for i in system.getForces():
                 i.setForceGroup(0)
 
@@ -96,18 +84,14 @@ class BaseExtractor():
             cls.group_name2num = {}
 
             def update_grouping(name, force):
-               # global group_number
-               # global group_name2num
+
                 if name in cls.group_name2num:
                     cls.group_name2num[name].append(cls.group_number)
                 else:
                     cls.group_name2num[name] = [cls.group_number]
                 force.setForceGroup(cls.group_number)
                 cls.group_number += 1
-            #     print(cls.group_name2num)
-            ##################
-            ################# Expressions
-            ################
+
             V_lj = """4*epsilon*(((sigma/r)^6)^2 - (sigma/r)^6);
                 epsilon = sqrt(epsilon1 * epsilon2);
                 sigma = 0.5*(sigma1+sigma2)
@@ -117,7 +101,7 @@ class BaseExtractor():
                 ONE_4PI_EPS0 = %.16e;
                 c_rf = %f;
                 k_rf = %f
-            """ % (ONE_4PI_EPS0, c_rf.value_in_unit_system(md_unit_system), k_rf.value_in_unit_system(md_unit_system))
+            """ % (ONE_4PI_EPS0, c_rf.value_in_unit_system(u.md_unit_system), k_rf.value_in_unit_system(u.md_unit_system))
 
             V_14_lj = "2^(-1)* 4*epsilon*(((sigma/r)^6)^2 - (sigma/r)^6)" #calling them xepsilon and xsigma just to see if this interferes with the `addPerParticleParameter` below
 
@@ -125,19 +109,19 @@ class BaseExtractor():
                 ONE_4PI_EPS0 = %.16e;
                 c_rf = %f;
                 k_rf = %f
-            """ % (ONE_4PI_EPS0, c_rf.value_in_unit_system(md_unit_system), k_rf.value_in_unit_system(md_unit_system))
+            """ % (ONE_4PI_EPS0, c_rf.value_in_unit_system(u.md_unit_system), k_rf.value_in_unit_system(u.md_unit_system))
 
             V_excluded_crf = """(q_prod*ONE_4PI_EPS0)*( (k_rf)*(r^2) - (c_rf));
                 ONE_4PI_EPS0 = %.16e;
                 c_rf = %f;
                 k_rf = %f
-            """ % (ONE_4PI_EPS0, c_rf.value_in_unit_system(md_unit_system), k_rf.value_in_unit_system(md_unit_system))
+            """ % (ONE_4PI_EPS0, c_rf.value_in_unit_system(u.md_unit_system), k_rf.value_in_unit_system(u.md_unit_system))
 
             V_self_crf = """0.5 * (q_prod*ONE_4PI_EPS0)*(  - (c_rf));
                 ONE_4PI_EPS0 = %.16e;
                 c_rf = %f;
                 k_rf = %f
-            """ % (ONE_4PI_EPS0, c_rf.value_in_unit_system(md_unit_system), k_rf.value_in_unit_system(md_unit_system))
+            """ % (ONE_4PI_EPS0, c_rf.value_in_unit_system(u.md_unit_system), k_rf.value_in_unit_system(u.md_unit_system))
             #######################
             ####################### Normal LJ, solute-solute
             #######################
@@ -288,7 +272,7 @@ class BaseExtractor():
                 sigma = 0.5*(sigma1+sigma2)
                 epsilon = (epsilon1 * epsilon2).sqrt()
 
-                new_force.addBond(atom_pair[0], atom_pair[1], [sigma.value_in_unit_system(md_unit_system), epsilon.value_in_unit_system(md_unit_system)])
+                new_force.addBond(atom_pair[0], atom_pair[1], [sigma.value_in_unit_system(u.md_unit_system), epsilon.value_in_unit_system(u.md_unit_system)])
 
             update_grouping("intra_lj", new_force)
             system.addForce(new_force)
@@ -308,7 +292,7 @@ class BaseExtractor():
                 sigma = 0.5*(sigma1+sigma2)
                 epsilon = (epsilon1 * epsilon2).sqrt()
 
-                new_force.addBond(atom_pair[0], atom_pair[1], [sigma.value_in_unit_system(md_unit_system), epsilon.value_in_unit_system(md_unit_system)])
+                new_force.addBond(atom_pair[0], atom_pair[1], [sigma.value_in_unit_system(u.md_unit_system), epsilon.value_in_unit_system(u.md_unit_system)])
 
             update_grouping("solvent_lj", new_force)
             system.addForce(new_force)
@@ -327,7 +311,7 @@ class BaseExtractor():
                 charge2, sigma2, epsilon2 = nonbonded_force.getParticleParameters(atom_pair[1])
 
                 charge = charge1 * charge2
-                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(md_unit_system)])
+                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(u.md_unit_system)])
 
             update_grouping("intra_crf", new_force)
             system.addForce(new_force)
@@ -346,7 +330,7 @@ class BaseExtractor():
                 charge2, sigma2, epsilon2 = nonbonded_force.getParticleParameters(atom_pair[1])
 
                 charge = charge1 * charge2
-                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(md_unit_system)])
+                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(u.md_unit_system)])
 
             update_grouping("solvent_crf", new_force)
             system.addForce(new_force)
@@ -365,7 +349,7 @@ class BaseExtractor():
 
                 charge = charge1 * charge2
 
-                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(md_unit_system)])
+                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(u.md_unit_system)])
 
             update_grouping("intra_crf", new_force)
             system.addForce(new_force)
@@ -383,7 +367,7 @@ class BaseExtractor():
 
                 charge = charge1 * charge2
 
-                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(md_unit_system)])
+                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(u.md_unit_system)])
 
             update_grouping("solvent_crf", new_force)
             system.addForce(new_force)
@@ -402,7 +386,7 @@ class BaseExtractor():
 
                 charge = charge1 * charge2
 
-                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(md_unit_system)])
+                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(u.md_unit_system)])
 
             update_grouping("intra_crf", new_force)
             system.addForce(new_force)
@@ -421,7 +405,7 @@ class BaseExtractor():
 
                 charge = charge1 * charge2
 
-                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(md_unit_system)])
+                new_force.addBond(atom_pair[0], atom_pair[1], [charge.value_in_unit_system(u.md_unit_system)])
 
             update_grouping("solvent_crf", new_force)
             system.addForce(new_force)
@@ -435,7 +419,7 @@ class BaseExtractor():
             # for i in system.getForces():
             #     print(i,i.getForceGroup())
 
-            integrator = LangevinIntegrator(298.15*kelvin, 1/picosecond, 0.002*picoseconds)
+            integrator = LangevinIntegrator(298.15*u.kelvin, 1/u.picosecond, 0.002*u.picoseconds)
             platform = Platform.getPlatformByName(platform)
             context = Context(system, integrator, platform)
 
@@ -818,12 +802,7 @@ class BaseExtractor():
                 select_string = "(elem N or elem O or elem S or elem P or (elem H and (neighbor elem N+O+S+P))) and {} and not name {}".format(obj, atom_to_remove)  #@carmen add: "or elem S"
             else:
                 select_string = "(elem N or elem O or (elem H and (neighbor elem N+O))) and {} and not name {}".format(obj, atom_to_remove)  #@carmen add: "or elem S"
-        # else:
-        #     if include_SandP:
-        #         select_string = "resn {} and (elem N or elem O or elem S or elem P or (elem H and (neighbor elem N+O+S+P))) and ".format(solute_resname) + obj   #@carmen add: "or elem S"
-        #     else:
-        #         select_string = "resn {} and (elem N or elem O or (elem H and (neighbor elem N+O))) and ".format(solute_resname) + obj  #@carmen add: "or elem S"
-        ##Loop over all states
+
         psa = []
         for state in states:
                 cmd.select("noh", select_string) #TODO is this really always called 'noh'?
@@ -1233,11 +1212,3 @@ class LiquidExtractor(BaseExtractor):
 
 
 
-"""
-Examples:
--------------------
-parm_path = '/home/shuwang/Documents/Modelling/MDFP/Codes/vapour_pressure/crc_handbook/corrupted/RU18.1_8645.pickle'
-parm = pickle.load(open(parm_path,"rb"))
-traj = md.load('/home/shuwang/Documents/Modelling/MDFP/Codes/vapour_pressure/crc_handbook/corrupted/RU18.1_8645.h5')[:5]
-print(LiquidExtractor.extract_dipole_magnitude(traj, parm))
-"""

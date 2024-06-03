@@ -1,32 +1,18 @@
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors
 # from Per_Frame_Property_Extractor import *
-from Extractor import *
+from mdfptools.Extractor import *
 
 import numpy as np
 from numpy import mean, std, median, isnan, array
 
 import functools
 
-"""
-TODOs:
-    - cls.smiles to cls.mol??? 
-    - store a copy of smiles into the MDFP object?
-    - lift substructural search in zwitterion out of function?
-    - CustomComposer
-    - how to customise which mean median std function to use per property?
-"""
+
 class MDFP():
     """
     A MDFP object contains a set of features for a molecule, obtaining from a simulation or a set of simulations.
 
-
-    .. todo::
-        - method to give back the keys
-        - store some metdadata? e.g. which composer made it
-        - Option to create a empty MDFP
-        - load in experimental field
-        - serialisation
     """
     def __init__(self, mdfp_dict):
         """
@@ -41,16 +27,9 @@ class MDFP():
         self.mdfp = mdfp_dict
         self.metadata = {}
 
-    # @property
-    # def metadata(self):
-    #     return self._metadata
-    
-    # @metadata.setter
-    # def metadata(self, key, val):
-    #     self.metadata[key] = val
 
 
-    def get_mdfp(self, which_keys = None): #TODO update doc
+    def get_mdfp(self, which_keys = None):
         """
         Returns
         ----------
@@ -79,17 +58,16 @@ class BaseComposer():
     """
 
     @classmethod
-    def run(cls, smiles, order = None ):
+    def run(cls, smiles,):
         """
         Parameters
         ----------
         smiles : str
             SMILES string of the solute molecule
-         order : #TODO
+
         """
         cls.smiles = smiles
-        cls.fp = {"__order__" : order} if order else {}
-
+        cls.fp = {}
         cls._get_relevant_properties()
 
         return MDFP(cls.fp)
@@ -127,7 +105,6 @@ class BaseComposer():
         ratio_eig_vals = eig_vals[0]/eig_vals[1]
         return ratio_eig_vals
 
-    #XXX : is cmpd_name needed?
     @classmethod
     def _extract_zwitterionic_label(cls, dist_cutoff = None, cmpd_name = None):
         """
@@ -213,14 +190,7 @@ class BaseComposer():
                     is_zwit = 0
             else:
                 is_zwit = 0
-            
-        # dict_zwit = {"is_zwit": is_zwit}  
 
-        # if cmpd_name == None:
-        #     return dict_zwit
-        # else:
-        #     dict_zwit.update({"cmpd_name": cmpd_name})
-        #     return dict_zwit
         return is_zwit
 
     @classmethod
@@ -249,7 +219,6 @@ class BaseComposer():
         return {"2d_counts" : fp}
 
 
-    #XXX better way of including this
     @classmethod
     def _get_extended_2d_descriptors(cls, cmpd_name = None, includeSandP = True, **kwargs):
         """
@@ -343,21 +312,7 @@ class BaseComposer():
         return mdtraj_obj
 
 
-"""
-class TrialSolutionComposer(BaseComposer):
-    def __init__(cls, smiles, mdtraj_obj, parmed_obj, **kwargs):
-        cls.kwargs = {"mdtraj_obj" : mdtraj_obj ,
-                        "parmed_obj" : parmed_obj}
-        cls.kwargs = {**cls.kwargs , **kwargs}
-        super(TrialSolutionComposer, cls).__init__(smiles)
-    def _get_relevant_properties(cls):
-        cls.fp  = {**cls.fp, **cls._get_2d_descriptors()}
-        cls.fp  = {**cls.fp, **cls._get_statistical_moments(TrialSolutionExtractor.extract_energies, **cls.kwargs)}
-        cls.fp  = {**cls.fp, **cls._get_statistical_moments(WaterExtractor.extract_rgyr, **cls.kwargs)}
-        cls.fp  = {**cls.fp, **cls._get_statistical_moments(WaterExtractor.extract_sasa, **cls.kwargs)}
 
-        del cls.kwargs
-"""
 
 # class MDFPComposer(BaseComposer):
 class SolutionComposer(BaseComposer):
@@ -575,19 +530,3 @@ class CustomComposer(BaseComposer):
 
 
 
-
-"""
-parm_path = '/home/shuwang/Documents/Modelling/MDFP/Codes/vapour_pressure/crc_handbook/corrupted/RU18.1_8645.pickle'
-parm = pickle.load(open(parm_path,"rb"))
-traj = md.load('/home/shuwang/Documents/Modelling/MDFP/Codes/vapour_pressure/crc_handbook/corrupted/RU18.1_8645.h5')[:10]
-# print(Liquid_Extractor.extract_dipole_magnitude(traj, parm))
-x = MDFPComposer("Cl-C1:C:C:C:C2:C:C:C:C:C:1:2", traj, parm)
-# print(x._get_statistical_moments(Base_Extractor.extract_rgyr, **{"mdtraj_obj" : traj}))
-# print(x._get_statistical_moments(Liquid_Extractor.extract_dipole_magnitude, **{"mdtraj_obj" : traj, "parmed_obj" : parm}))
-# print(x._get_statistical_moments(Base_Extractor.extract_sasa, **{"mdtraj_obj" : traj, "parmed_obj" : parm}))
-# print(x._get_statistical_moments(Liquid_Extractor.extract_energies, **{"mdtraj_obj" : traj, "parmed_obj" : parm , "platform" : "OpenCL"}))
-print(x.fp)
-print(x.__dict__)
-print(x.get_mdfp())
-pickle.dump(x, open("/home/shuwang/tmp.pickle", "wb"))
-"""
