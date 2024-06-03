@@ -100,28 +100,3 @@ ENV/
 
 # mypy
 .mypy_cache/
-
-
-examples/mols_3d
-*prmtop
-*.tsv
-
-
-*.mol
-*.sdf
-*.gz
-*.pkl
-*.pickle
-*.csv
-*.out
-*.txt
-*/side_experiments/*
-*/unclean/*
-*/example_data/*
-*.h5
-*.png
-carl/data_curation/QSAR-ready
-
-*.pt
-*.xlsx
-*.jpg
