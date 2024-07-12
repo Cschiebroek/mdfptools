@@ -3,7 +3,7 @@ import sys
 from rdkit import Chem
 from rdkit.Chem import SaltRemover, AllChem, Draw
 import simtk.unit as units
-
+from rdkit.Chem.Descriptors import MolWt
 
 def get_data_filename(relative_path): #TODO put in utils
     """Get the full path to one of the reference files in testsystems.
@@ -150,7 +150,7 @@ def approximate_volume_by_density(smiles_strings, n_molecules_list, density=1.0,
     mass = 0.0*units.grams/units.mole * 1./units.AVOGADRO_CONSTANT_NA #For calculating total mass
     for (idx,smi) in enumerate(smiles_strings):
         mol = Chem.MolFromSmiles(smi)
-        wts.append( Chem.Descriptors.MolWt(mol)*units.grams/units.mole )
+        wts.append(MolWt(mol)*units.grams/units.mole )
         mass += n_molecules_list[idx] * wts[idx] * 1./units.AVOGADRO_CONSTANT_NA
 
     #Estimate volume based on mass and density

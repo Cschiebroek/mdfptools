@@ -20,7 +20,20 @@ import os
 import numpy as np
 
 
-from utils import approximate_volume_by_density
+from openff.evaluator.substances import Substance, Component, MoleFraction
+from openff.evaluator.workflow.schemas import WorkflowSchema
+
+from openff.evaluator.protocols.coordinates import BuildCoordinatesPackmol
+from openff.evaluator.protocols.forcefield import BuildSmirnoffSystem
+from openff.evaluator.workflow.utils import ProtocolPath
+
+from openff.evaluator.thermodynamics import ThermodynamicState
+
+from openff.evaluator.workflow import Workflow
+
+from openff.evaluator import unit as openff_unit
+
+
 
 ##############################################################
 
@@ -68,7 +81,7 @@ class BaseParameteriser():
 
 
         seed = 0xf00d
-        mol = Chem.MolFromSmiles(smiles, sanitize=False)
+        mol = Chem.MolFromSmiles(smiles, sanitize=True)
         mol = Chem.AddHs(mol)
         AllChem.EmbedMolecule(mol, enforceChirality=True, randomSeed=seed)
         rdmolops.AssignStereochemistryFrom3D(mol)
@@ -238,7 +251,7 @@ class SolutionParameteriser(BaseParameteriser):
 
         if cls.solvent_pmd is None:
             try:
-                cls.solvent_pmd = parmed.load_file("tip3p.prmtop") #TODO get this path instead of giving absolute path
+                cls.solvent_pmd = parmed.load_file("../data/tip3p.prmtop") #TODO get this path instead of giving absolute path
 
 
             except ValueError:
@@ -351,3 +364,79 @@ class SolutionParameteriser(BaseParameteriser):
 
 
 
+class LiquidParameteriser(BaseParameteriser):
+    """
+    Parameterisation of liquid box, i.e. multiple replicates of the same molecule
+    """
+
+    @classmethod  # TODO boxsize packing scale factor should be customary
+    def run(cls, smiles, density=0.95, *, num_lig=100,**kwargs):
+        """
+        Parameterisation perfromed either with openeye or rdkit toolkit.
+
+        Parameters
+        ----------------
+        smiles : str
+            SMILES string of the molecule to be parametersied
+        density : float
+            Density of liquid box
+        num_lig : int
+            Number of replicates of the molecule
+
+        Returns
+        ------------------
+        system_pmd : parmed.structure
+            The parameterised system as parmed object
+        """
+
+        cls.smiles = smiles
+        return cls._via_helper(density, num_lig, **kwargs)
+
+
+    @classmethod
+    def _via_helper(cls, density, num_lig, **kwargs):
+        # Define the substance
+        substance = Substance()
+        substance.add_component(Component(smiles=cls.smiles), MoleFraction(1.0))
+
+        # Create the workflow schema
+        schema = WorkflowSchema()
+
+        # Step 1: Build coordinates
+        build_coordinates = BuildCoordinatesPackmol("build_coordinates")
+        build_coordinates.max_molecules = num_lig
+        build_coordinates.mass_density = density * openff_unit.grams / openff_unit.milliliters
+        build_coordinates.substance = substance
+        schema.protocol_schemas.append(build_coordinates.schema)
+
+        # Step 2: Assign parameters
+        assign_parameters = BuildSmirnoffSystem("assign_parameters")
+        force_field_path = kwargs['ff_path'] if 'ff_path' in kwargs else "openff_unconstrained-2.1.0.offxml"    
+        assign_parameters.force_field_path = force_field_path
+        assign_parameters.coordinate_file_path = ProtocolPath("coordinate_file_path", build_coordinates.id)
+        assign_parameters.substance = substance
+        schema.protocol_schemas.append(assign_parameters.schema)
+
+        # Metadata
+        metadata = {
+            "substance": substance,
+            "thermodynamic_state": ThermodynamicState(
+                temperature=298.15 * openff_unit.kelvin,
+                pressure=1.0 * openff_unit.atmosphere
+            ),
+            "force_field_path": force_field_path
+        }
+
+        # Create and execute the workflow
+        workflow = Workflow.from_schema(schema, metadata=metadata)
+        workflow.execute()
+
+        pdb_file = f'{workflow.schema.id}_build_coordinates/output.pdb'
+        parameterized_system = f'{workflow.schema.id}_assign_parameters/system.xml'
+        omm_top = PDBFile(pdb_file).topology
+        parmed_obj = parmed.openmm.load_topology(omm_top, parameterized_system)
+        shutil.rmtree(f'{workflow.schema.id}_build_coordinates')
+        shutil.rmtree(f'{workflow.schema.id}_assign_parameters')
+        return parmed_obj
+
+    via_rdkit = partialmethod(run)
