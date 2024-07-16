@@ -3,6 +3,7 @@ from functools import partialmethod
 
 
 from simtk import unit  # Unit handling for OpenMM
+import openmm
 from openmm import *
 from openmm import app
 from openmm.app import *
@@ -33,7 +34,7 @@ from openff.evaluator.workflow import Workflow
 
 from openff.evaluator import unit as openff_unit
 
-
+import logging
 
 ##############################################################
 
@@ -362,62 +363,65 @@ class SolutionParameteriser(BaseParameteriser):
 
     via_rdkit = partialmethod(run)
 
-
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class LiquidParameteriser(BaseParameteriser):
     """
-    Parameterisation of liquid box, i.e. multiple replicates of the same molecule
+    Parameterisation of liquid box, i.e. multiple replicates of the same molecule.
     """
 
-    @classmethod  # TODO boxsize packing scale factor should be customary
-    def run(cls, smiles, density=0.95, *, num_lig=100,**kwargs):
+    @classmethod
+    def run(cls, smiles: str, density: float = 0.95, *, n_mols: int = 256, **kwargs) -> parmed.structure.Structure:
         """
-        Parameterisation perfromed either with openeye or rdkit toolkit.
+        Parameterisation performed either with OpenEye or RDKit toolkit.
 
         Parameters
         ----------------
         smiles : str
-            SMILES string of the molecule to be parametersied
+            SMILES string of the molecule to be parameterised.
         density : float
-            Density of liquid box
-        num_lig : int
-            Number of replicates of the molecule
+            Density of the liquid box. Default is 0.95 g/mL.
+        n_mols : int
+            Number of replicates of the molecule. Default is 256.
 
         Returns
         ------------------
-        system_pmd : parmed.structure
-            The parameterised system as parmed object
+        system_pmd : parmed.structure.Structure
+            The parameterised system as a parmed object.
         """
-
-        cls.smiles = smiles
-        return cls._via_helper(density, num_lig, **kwargs)
-
+        logger.info(f"Running parameterisation for SMILES: {smiles} with density: {density} g/mL and {n_mols} molecules.")
+        
+        try:
+            return cls._via_helper(smiles, density, n_mols, **kwargs)
+        except Exception as e:
+            logger.error(f"Error during parameterisation: {e}")
+            raise
 
     @classmethod
-    def _via_helper(cls, density, num_lig, **kwargs):
-        # Define the substance
+    def _via_helper(cls, smiles: str, density: float, n_mols: int, **kwargs) -> parmed.structure.Structure:
+        logger.info("Creating substance and workflow schema.")
         substance = Substance()
-        substance.add_component(Component(smiles=cls.smiles), MoleFraction(1.0))
+        substance.add_component(Component(smiles=smiles), MoleFraction(1.0))
 
-        # Create the workflow schema
         schema = WorkflowSchema()
 
         # Step 1: Build coordinates
         build_coordinates = BuildCoordinatesPackmol("build_coordinates")
-        build_coordinates.max_molecules = num_lig
+        build_coordinates.max_molecules = n_mols
         build_coordinates.mass_density = density * openff_unit.grams / openff_unit.milliliters
         build_coordinates.substance = substance
         schema.protocol_schemas.append(build_coordinates.schema)
 
         # Step 2: Assign parameters
         assign_parameters = BuildSmirnoffSystem("assign_parameters")
-        force_field_path = kwargs['ff_path'] if 'ff_path' in kwargs else "openff_unconstrained-2.1.0.offxml"    
+        force_field_path = kwargs.get('ff_path', "openff_unconstrained-2.1.0.offxml")
         assign_parameters.force_field_path = force_field_path
         assign_parameters.coordinate_file_path = ProtocolPath("coordinate_file_path", build_coordinates.id)
         assign_parameters.substance = substance
         schema.protocol_schemas.append(assign_parameters.schema)
 
-        # Metadata
         metadata = {
             "substance": substance,
             "thermodynamic_state": ThermodynamicState(
@@ -427,16 +431,21 @@ class LiquidParameteriser(BaseParameteriser):
             "force_field_path": force_field_path
         }
 
-        # Create and execute the workflow
+        logger.info("Executing workflow.")
         workflow = Workflow.from_schema(schema, metadata=metadata)
         workflow.execute()
 
-        pdb_file = f'{workflow.schema.id}_build_coordinates/output.pdb'
-        parameterized_system = f'{workflow.schema.id}_assign_parameters/system.xml'
-        omm_top = PDBFile(pdb_file).topology
-        parmed_obj = parmed.openmm.load_topology(omm_top, parameterized_system)
-        shutil.rmtree(f'{workflow.schema.id}_build_coordinates')
-        shutil.rmtree(f'{workflow.schema.id}_assign_parameters')
+        try:
+            pdb_file = f'{workflow.schema.id}_build_coordinates/output.pdb'
+            parameterized_system = f'{workflow.schema.id}_assign_parameters/system.xml'
+            omm_top = PDBFile(pdb_file).topology
+            omm_sys = openmm.XmlSerializer.deserialize(open(parameterized_system).read())
+            parmed_obj = parmed.openmm.load_topology(omm_top, omm_sys, xyz=pdb_file)
+        finally:
+            shutil.rmtree(f'{workflow.schema.id}_build_coordinates', ignore_errors=True)
+            shutil.rmtree(f'{workflow.schema.id}_assign_parameters', ignore_errors=True)
+
+        logger.info("Parameterisation complete.")
         return parmed_obj
 
     via_rdkit = partialmethod(run)
