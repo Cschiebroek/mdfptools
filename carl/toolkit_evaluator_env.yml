@@ -1,0 +1,13 @@
+name: openff_toolkit_evaluator
+channels:
+  - conda-forge
+  - omnia
+dependencies:
+  - openmm=8.0.0 #latest: 8.1
+  - openff-toolkit=0.14.3 #latest: 0.16.0
+  - openff-evaluator #latest: 0.4.8
+  - parmed=4.1.0 #latest: 4.2.2
+  - mdtraj=1.9.9 #latest 1.10.0
+  - numpy=1.26.0 #latest 1.26.4
+  - python=3.11 #latest 3.12.3
+  - pdbfixer=1.9 #up to date with latest version

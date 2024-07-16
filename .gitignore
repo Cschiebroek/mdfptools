@@ -120,8 +120,17 @@ examples/mols_3d
 */example_data/*
 *.h5
 *.png
-carl/data_curation/QSAR-ready
+carl/data_curation/QSAR-ready/*
 
 *.pt
 *.xlsx
 *.jpg
+
+*assign_paramters/
+*build_coordinates/
+
+*.dat*
+*.xml
+*.json
+*.pdb
+*.dcd

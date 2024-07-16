@@ -1,4 +1,4 @@
-import Parameteriser
+import carl.liquid_phase_experiments.Parameteriser as Parameteriser
 from Simulator import SolutionSimulator
 from Composer import SolutionComposer
 import mdtraj as md

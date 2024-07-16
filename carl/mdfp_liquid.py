@@ -1,5 +1,5 @@
 #mdfptools
-from Parameteriser import LiquidParameteriser
+from carl.liquid_phase_experiments.Parameteriser import LiquidParameteriser
 from Simulator import LiquidSimulator
 from Composer import LiquidComposer
 
