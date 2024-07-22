@@ -530,3 +530,43 @@ class CustomComposer(BaseComposer):
 
 
 
+class VacuumComposer(BaseComposer):
+    """
+    Composer used to extract features from liquid simulations, namely a box containing replicates of the same molecule.
+    """
+    # def __init__(cls, smiles, mdtraj_obj, parmed_obj):
+    @classmethod
+    def run(cls, mdtraj_obj, parmed_obj, smiles = None, *args, **kwargs): #TODO better way of excluding unwanted arguments than *args
+        """
+        Parameters
+        -----------
+        mdtraj_obj : mdtraj.trajectory
+            The simulated trajectory
+        parmed_obj : parmed.structure
+            Parmed object of the fully parameterised simulated system.
+        smiles : str
+            SMILES string of one copy of the solute. If mdfptools.Parameteriser was used during parameterisation, then smiles is automatically obtained from the parmed_obj.
+        """
+        cls.kwargs = {"mdtraj_obj" : mdtraj_obj ,
+                        "parmed_obj" : parmed_obj}
+        
+        mdtraj_obj = cls._center_molecule(mdtraj_obj, parmed_obj)
+
+        cls.kwargs = {**cls.kwargs , **kwargs}
+        if smiles is None:
+            if parmed_obj.title != '': #try to obtain it from `parmed_obj`
+                smiles = parmed_obj.title
+            else:
+                raise ValueError("Input ParMed Object {} does not contain SMILES string, add SMILES as an additional variable".format(parmed_obj))
+        return super().run(smiles)
+
+    @classmethod
+    def _get_relevant_properties(cls):
+        """
+        Where the set of features to be included in the final MDFP are defined
+        """
+        cls.fp  = {**cls.fp, **cls._get_2d_descriptors()}
+        cls.fp  = {**cls.fp, **cls._get_statistical_moments(VacuumExtractor.extract_energies, **cls.kwargs)}
+        cls.fp  = {**cls.fp, **cls._get_statistical_moments(VacuumExtractor.extract_rgyr, **cls.kwargs)}
+        cls.fp  = {**cls.fp, **cls._get_statistical_moments(VacuumExtractor.extract_sasa, **cls.kwargs)}
+        cls.fp  = {**cls.fp, **cls._get_statistical_moments(VacuumExtractor.extract_dipole_magnitude, **cls.kwargs)}

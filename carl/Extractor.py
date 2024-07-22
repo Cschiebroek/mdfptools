@@ -1211,4 +1211,167 @@ class LiquidExtractor(BaseExtractor):
         return solute_1_4_pairs,solvent_1_4_pairs, solute_excluded_pairs, solvent_excluded_pairs, solute_self_pairs, solvent_self_pairs
 
 
+class VacuumExtractor(LiquidExtractor):
+    """
+    Synonyms class as LiquidExtractor
 
+    Parameters
+    -----------
+    string_identifier : str
+        The string identifier tagged as prefix to all values extracted in this class.
+
+    """
+    string_identifier = "vacuum"
+
+    @classmethod
+    def _extract_energies_helper(cls, mdtraj_obj, parmed_obj, platform="CPU", **kwargs):
+        """
+        Extracts the forces on each atom for each frame of the simulation.
+
+        Parameters
+        -------------
+        mdtraj_obj : mdtraj.trajectory
+            The simulated trajectory
+        parmed_obj : parmed.structure
+            Parmed object of the fully parameterized simulated system.
+        platform : str
+            The computing architecture to do the calculation, default to CPU, CUDA, OpenCL is also possible.
+
+        Returns
+        ------------
+        forces_dict : dict
+            A dictionary with keys as atom indices and values as lists of force vectors for each frame.
+        """
+        parm, traj = parmed_obj, mdtraj_obj
+
+        # Create the system for a vacuum simulation
+        system = parm.createSystem(nonbondedMethod=NoCutoff, constraints=AllBonds)
+        for force in system.getForces():
+            force.setForceGroup(0)
+
+        topology = mdtraj_obj.topology
+        solute_atoms, _ = cls._solute_solvent_split(topology, **kwargs)
+        solute_1_4_pairs, _, solute_excluded_pairs, _, solute_self_pairs, _ = cls._get_all_exception_atom_pairs(system, topology, parmed_obj)
+
+        forces = {force.__class__.__name__: force for force in system.getForces()}
+        nonbonded_force = forces['NonbondedForce']
+        r_cutoff = nonbonded_force.getCutoffDistance()
+
+        ONE_4PI_EPS0 = 138.935456
+
+        cls.group_number = 1
+        cls.group_name2num = {}
+
+        def update_grouping(name, force):
+            if name in cls.group_name2num:
+                cls.group_name2num[name].append(cls.group_number)
+            else:
+                cls.group_name2num[name] = [cls.group_number]
+            force.setForceGroup(cls.group_number)
+            cls.group_number += 1
+
+        # Custom LJ potential
+        V_lj = """4*epsilon*(((sigma/r)^6)^2 - (sigma/r)^6);
+                  epsilon = sqrt(epsilon1 * epsilon2);
+                  sigma = 0.5*(sigma1+sigma2)
+               """
+
+        # Custom Coulomb potential
+        V_crf = """(q1*q2*ONE_4PI_EPS0)*(r^(-1));
+                  ONE_4PI_EPS0 = %.16e;
+               """ % (ONE_4PI_EPS0)
+
+        # 1-4 LJ potential
+        V_14_lj = """2^(-1)* 4*epsilon*(((sigma/r)^6)^2 - (sigma/r)^6);
+                     epsilon = sqrt(epsilon1 * epsilon2);
+                     sigma = 0.5*(sigma1+sigma2)
+                  """
+
+        # 1-4 Coulomb potential
+        V_14_crf = """(1.2)^(-1)*(q1*q2*ONE_4PI_EPS0)*(r^(-1));
+                      ONE_4PI_EPS0 = %.16e;
+                   """ % (ONE_4PI_EPS0)
+
+        # Intra-molecular Lennard-Jones forces
+        new_force = CustomNonbondedForce(V_lj)
+        new_force.setNonbondedMethod(NonbondedForce.NoCutoff)
+        new_force.addPerParticleParameter('sigma')
+        new_force.addPerParticleParameter('epsilon')
+
+        for particle in range(nonbonded_force.getNumParticles()):
+            [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle)
+            new_force.addParticle([sigma, epsilon])
+
+        new_force.createExclusionsFromBonds([(i[0].index, i[1].index) for i in parm.topology.bonds()], 3)
+        new_force.addInteractionGroup(solute_atoms, solute_atoms)
+
+        update_grouping("intra_lj", new_force)
+        system.addForce(new_force)
+
+        # Intra-molecular Coulomb forces
+        new_force = CustomNonbondedForce(V_crf)
+        new_force.setNonbondedMethod(NonbondedForce.NoCutoff)
+        new_force.addPerParticleParameter('q')
+
+        for particle in range(nonbonded_force.getNumParticles()):
+            [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle)
+            new_force.addParticle([charge])
+
+        new_force.createExclusionsFromBonds([(i[0].index, i[1].index) for i in parm.topology.bonds()], 3)
+        new_force.addInteractionGroup(solute_atoms, solute_atoms)
+
+        update_grouping("intra_crf", new_force)
+        system.addForce(new_force)
+
+        # Removing the default NonbondedForce from the system
+        system.removeForce([force.getForceGroup() for force in system.getForces() if force.__class__.__name__ == "NonbondedForce"][0])
+
+        integrator = VerletIntegrator(0.001*unit.picoseconds)
+        platform = Platform.getPlatformByName(platform)
+        context = Context(system, integrator, platform)
+
+        return context, integrator
+    
+    @classmethod
+    def extract_energies(cls, mdtraj_obj, parmed_obj, platform = "CPU", **kwargs):
+            """
+            Extracting the various energetic components described in the original publication from each frame of simulation.
+
+            Parameters
+            -------------
+            mdtraj_obj : mdtraj.trajectory
+                The simulated trajectory
+            parmed_obj : parmed.structure
+                Parmed object of the fully parameterised simulated system.
+            platform : str
+                The computing architecture to do the calculation, default to CPU, CUDA, OpenCL is also possible.
+
+            Returns
+            ------------
+            df : dict
+                Keys are each of the energetic type features. e.g. "intra_lj" are the intra-molecular LJ energies obtained from simulation.
+
+                Values are the corresponding set of numerics, stored as lists.
+            """
+            df = {}
+
+
+            context, integrator = cls._extract_energies_helper(mdtraj_obj, parmed_obj, platform = "CPU", **kwargs)
+
+
+            df["{}_intra_crf".format(cls.string_identifier)] = []
+            df["{}_intra_lj".format(cls.string_identifier)] = []
+            
+            #TODO can speed up the for loop?????
+            for i in range(len(mdtraj_obj)):
+                context.setPositions(mdtraj_obj.openmm_positions(i))
+
+                df["{}_intra_crf".format(cls.string_identifier)].append(context.getState(getEnergy=True, groups=set(cls.group_name2num["intra_crf"])).getPotentialEnergy()._value)
+                df["{}_intra_lj".format(cls.string_identifier)].append(context.getState(getEnergy=True, groups=set(cls.group_name2num["intra_lj"])).getPotentialEnergy()._value)
+
+
+            #TODO can speed up the for loop?????
+            df["{}_intra_ene".format(cls.string_identifier)] = [sum(x) for x in zip(df["{}_intra_crf".format(cls.string_identifier)], df["{}_intra_lj".format(cls.string_identifier)])]
+
+            del context, integrator
+            return df
