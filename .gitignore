@@ -134,3 +134,6 @@ carl/data_curation/QSAR-ready/*
 *.json
 *.pdb
 *.dcd
+/tmp/*
+*/sandbox.ipynb
+carl/openff-evaluator

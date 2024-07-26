@@ -1,4 +1,4 @@
-from carl.liquid_phase_experiments import Parameteriser
+from carl import Parameteriser
 from carl.Simulator import SolutionSimulator
 
 smiles = 'c1ccccc1'

@@ -1,7 +1,8 @@
 import sys
 import openff.toolkit
 import openmm
-import git
+import psycopg2
+
 
 from rdkit import Chem
 from rdkit.Chem import Draw
@@ -15,9 +16,6 @@ import uuid
 import rdkit
 print(rdkit.__version__)
 
-import lwreg
-from lwreg import standardization_lib
-from lwreg import utils
 import getpass
 import datetime
 date = datetime.datetime.now()
@@ -25,13 +23,20 @@ date = datetime.datetime.now()
 
 ff_name = "openff_unconstrained-2.1.0.offxml"
 ff_version = openff.toolkit.__version__
-simulation_type = "tMD water solution"
+simulation_type = "tMD gas phase solution"
 md_engine = "openMM"
 version = openmm.__version__
 steps_time = 5.0
 Git_repo_name = "mdfptools"
-repo = git.Repo(search_parent_directories=True)
-Git_commit_hash = repo.head.object.hexsha
+
+try:
+    import git
+    repo = git.Repo(search_parent_directories=True)
+    Git_commit_hash = repo.head.object.hexsha
+except ModuleNotFoundError:
+    #ask for commit hash
+    print('Gitpython not found. Please provide the commit hash:')
+    Git_commit_hash = input()
 
 #print all metadata
 print('Metadata values:')
@@ -48,19 +53,12 @@ print("Date: ", date)
 print('------------------------------------\n')
 print(f'Are you 100% sure you want to save this metadata to the database?\n')
 pw = getpass.getpass()
-config = lwreg.utils.defaultConfig()
-# set the name of the database we'll work with:
-config['dbtype'] = 'postgresql'
-config['dbname'] = 'cs_mdfps'
-config['host'] = 'scotland'
-config['user'] = 'cschiebroek'
-config['password'] = pw # password is saved in our .pgpass
-# we don't want to standardize the molecules:
-config['standardization'] = standardization_lib.RemoveHs()
-# we want to store conformers
-config['registerConformers'] = True
-cn = utils._connect(config)
+hostname = 'scotland'
+dbname = 'cs_mdfps'
+username = 'cschiebroek'
+cn = psycopg2.connect(host=hostname, dbname=dbname, user=username)
 cur = cn.cursor()
+
 cur.execute(f"SELECT md_experiment_uuid FROM cs_mdfps_schema.md_experiments_metadata WHERE ff_name = '{ff_name}' AND ff_version = '{ff_version}' AND simulation_type = '{simulation_type}' AND md_engine = '{md_engine}' AND version = '{version}' AND time = '{steps_time}' AND Git_repo_name = '{Git_repo_name}' AND Git_commit_hash = '{Git_commit_hash}';")
 try:
     Md_Experiment_uuid = cur.fetchone()[0]
