@@ -202,28 +202,34 @@ class VacuumSimulator(BaseSimulator):
 
         return os.path.abspath(path)
     
-class InterfaceSimulator(LiquidSimulator):
+class InterfaceSimulator(LiquidSimulator):    
+    
     @classmethod
-    def via_openmm(cls, parmed_obj, file_name, file_path="./", platform="CUDA", t_ns=5, write_out_freq=5000, report_equilibration=True, report_production=True,
-                   constrain_all_bonds=True,T_kelvin= 298.15,**kwargs):
+    def via_openmm(cls, parmed_obj, file_name, file_path="./", platform="CUDA", num_steps=5000 * 500, write_out_freq=5000, report_equilibration=True, report_production=True,
+                   constrain_all_bonds=True,T_kelvin=298.15, **kwargs):
+        """
+        Runs simulation using OpenMM.
 
-        # Configure logging
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-        logger = logging.getLogger(__name__)
+        Parameters
+        ------------
+        parmed_obj : parmed.structure
+            Parmed object of the fully parameterised simulated system.
+        file_name : str
+            No file type postfix is necessary
+        file_path : str
+            Default to current directory
+        platform : str
+            The computing architecture to do the calculation, default to CUDA, CPU, OpenCL is also possible.
+        num_steps : int
+            Number of production simulation to run, default 2,500,000 steps, i.e. 5 ns.
+        write_out_freq : int
+            Write out every nth frame of simulated trajectory, default to every 5000 frame write out one, i.e. 10 ps per frame.
 
-
-        temperature = T_kelvin * unit.kelvin
-        pressure = 1.013 * unit.bar
-        time_step = 0.002 * unit.picoseconds
-
-        file_path="."
-        file_name = f'{file_name}_T_{T_kelvin}_t_{t_ns}'
-        platform="CUDA"
-        num_steps=5000 * 100 * t_ns
-        write_out_freq=500
-        constrain_all_bonds=True
-
-                        
+        Returns
+        --------
+        path : str
+            The absolute path where the trajectory is written to.
+        """
         logger.info("Starting simulation via OpenMM")
         platform = Platform.getPlatformByName(platform)
         pmd = parmed_obj
@@ -232,19 +238,18 @@ class InterfaceSimulator(LiquidSimulator):
         constrain_what_bond = app.AllBonds if constrain_all_bonds else app.HBonds
         system = pmd.createSystem(nonbondedMethod=app.PME, nonbondedCutoff=1*unit.nanometer, constraints=constrain_what_bond, rigidWater=False)
 
-        logger.info("Adding thermostat and barostat")
-        thermostat = AndersenThermostat(temperature, 1/unit.picosecond)
+        logger.info(f"Adding thermostat at {T_kelvin* unit.kelvin} and barostat at {cls.pressure}")
+        thermostat = AndersenThermostat(T_kelvin * unit.kelvin, 1/unit.picosecond)
         system.addForce(thermostat)
-        barostat = MonteCarloBarostat(pressure, temperature)
+        barostat = MonteCarloBarostat(cls.pressure, T_kelvin* unit.kelvin)
         system.addForce(barostat)
-        integrator = VerletIntegrator(time_step)
+        integrator = VerletIntegrator(cls.time_step)
 
         simulation = Simulation(pmd.topology, system, integrator, platform)
         simulation.context.setPeriodicBoxVectors(*pmd.box_vectors)
         simulation.context.setPositions(pmd.positions)
         simulation.minimizeEnergy()
         logger.info("Energy minimized")
-
 
         # Equilibration
         if "equil_steps" in kwargs:
@@ -263,10 +268,10 @@ class InterfaceSimulator(LiquidSimulator):
         del simulation
 
         system = pmd.createSystem(nonbondedMethod=app.PME, nonbondedCutoff=1*unit.nanometer, constraints=constrain_what_bond)
-        thermostat = AndersenThermostat(temperature, 1/unit.picosecond)
+        thermostat = AndersenThermostat(T_kelvin* unit.kelvin, 1/unit.picosecond)
         system.addForce(thermostat)
 
-        integrator = VerletIntegrator(time_step)
+        integrator = VerletIntegrator(cls.time_step)
         simulation = Simulation(pmd.topology, system, integrator, platform)
 
         pmd_copy = deepcopy(pmd)
@@ -276,12 +281,13 @@ class InterfaceSimulator(LiquidSimulator):
 
         simulation.context.setPeriodicBoxVectors(*pmd_copy.box_vectors)
         simulation.context.setPositions(pmd.positions)
-        simulation.reporters.append(StateDataReporter("{}/production_{}.dat".format(file_path, file_name), num_steps//50000, step=True, potentialEnergy=True, temperature=True, density=True,kineticEnergy=True,totalEnergy=True,volume=True))
+        if report_production:
+            simulation.reporters.append(StateDataReporter("{}/production_{}.dat".format(file_path, file_name), num_steps//50000, step=True, potentialEnergy=True, temperature=True, density=True,kineticEnergy=True,totalEnergy=True,volume=True))
         simulation.reporters.append(HDF5Reporter(path, write_out_freq))
         simulation.step(num_steps)
         logger.info("Production complete")
 
         return os.path.abspath(path)
-    
+
 
 
