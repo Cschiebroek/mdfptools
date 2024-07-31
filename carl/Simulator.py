@@ -6,6 +6,7 @@ from mdtraj.reporters import HDF5Reporter
 from utils import *
 import os
 import logging
+from copy import deepcopy
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -200,4 +201,87 @@ class VacuumSimulator(BaseSimulator):
         logger.info("Production complete")
 
         return os.path.abspath(path)
+    
+class InterfaceSimulator(LiquidSimulator):
+    @classmethod
+    def via_openmm(cls, parmed_obj, file_name, file_path="./", platform="CUDA", t_ns=5, write_out_freq=5000, report_equilibration=True, report_production=True,
+                   constrain_all_bonds=True,T_kelvin= 298.15,**kwargs):
+
+        # Configure logging
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        logger = logging.getLogger(__name__)
+
+
+        temperature = T_kelvin * unit.kelvin
+        pressure = 1.013 * unit.bar
+        time_step = 0.002 * unit.picoseconds
+
+        file_path="."
+        file_name = f'{file_name}_T_{T_kelvin}_t_{t_ns}'
+        platform="CUDA"
+        num_steps=5000 * 100 * t_ns
+        write_out_freq=500
+        constrain_all_bonds=True
+
+                        
+        logger.info("Starting simulation via OpenMM")
+        platform = Platform.getPlatformByName(platform)
+        pmd = parmed_obj
+        path = '{}/{}.h5'.format(file_path, file_name)
+
+        constrain_what_bond = app.AllBonds if constrain_all_bonds else app.HBonds
+        system = pmd.createSystem(nonbondedMethod=app.PME, nonbondedCutoff=1*unit.nanometer, constraints=constrain_what_bond, rigidWater=False)
+
+        logger.info("Adding thermostat and barostat")
+        thermostat = AndersenThermostat(temperature, 1/unit.picosecond)
+        system.addForce(thermostat)
+        barostat = MonteCarloBarostat(pressure, temperature)
+        system.addForce(barostat)
+        integrator = VerletIntegrator(time_step)
+
+        simulation = Simulation(pmd.topology, system, integrator, platform)
+        simulation.context.setPeriodicBoxVectors(*pmd.box_vectors)
+        simulation.context.setPositions(pmd.positions)
+        simulation.minimizeEnergy()
+        logger.info("Energy minimized")
+
+
+        # Equilibration
+        if "equil_steps" in kwargs:
+            cls.equil_steps = kwargs["equil_steps"]
+        logger.info(f"Equilibration steps: {cls.equil_steps}")
+
+        simulation.reporters.append(StateDataReporter("{}/equilibration_{}.dat".format(file_path, file_name), cls.equil_steps//5000, step=True, volume=True, temperature=True, density=True))
+        simulation.step(cls.equil_steps)
+        logger.info("Equilibration complete")
+
+        state = simulation.context.getState(getPositions=True, getVelocities=True)
+        pmd.positions, pmd.velocities, pmd.box_vectors = state.getPositions(), state.getVelocities(), state.getPeriodicBoxVectors()
+
+        # Production
+        del system
+        del simulation
+
+        system = pmd.createSystem(nonbondedMethod=app.PME, nonbondedCutoff=1*unit.nanometer, constraints=constrain_what_bond)
+        thermostat = AndersenThermostat(temperature, 1/unit.picosecond)
+        system.addForce(thermostat)
+
+        integrator = VerletIntegrator(time_step)
+        simulation = Simulation(pmd.topology, system, integrator, platform)
+
+        pmd_copy = deepcopy(pmd)
+        pmd_copy_box = pmd_copy.box
+        pmd_copy_box[2] = pmd_copy_box[2] * 5
+        pmd_copy.box = pmd_copy_box
+
+        simulation.context.setPeriodicBoxVectors(*pmd_copy.box_vectors)
+        simulation.context.setPositions(pmd.positions)
+        simulation.reporters.append(StateDataReporter("{}/production_{}.dat".format(file_path, file_name), num_steps//50000, step=True, potentialEnergy=True, temperature=True, density=True,kineticEnergy=True,totalEnergy=True,volume=True))
+        simulation.reporters.append(HDF5Reporter(path, write_out_freq))
+        simulation.step(num_steps)
+        logger.info("Production complete")
+
+        return os.path.abspath(path)
+    
+
 
