@@ -23,7 +23,7 @@ date = datetime.datetime.now()
 
 ff_name = "openff_unconstrained-2.1.0.offxml"
 ff_version = openff.toolkit.__version__
-simulation_type = "tMD gas phase solution"
+simulation_type = "tMD water solution"
 md_engine = "openMM"
 version = openmm.__version__
 steps_time = 5.0
@@ -53,7 +53,7 @@ print("Date: ", date)
 print('------------------------------------\n')
 print(f'Are you 100% sure you want to save this metadata to the database?\n')
 pw = getpass.getpass()
-hostname = 'scotland'
+hostname = 'lebanon'
 dbname = 'cs_mdfps'
 username = 'cschiebroek'
 cn = psycopg2.connect(host=hostname, dbname=dbname, user=username)
@@ -80,7 +80,7 @@ else:
 print('To continue, please type "yes"')
 answer = input()
 if answer == 'yes':
-    cur.execute("insert into cs_mdfps_schema.md_experiments_metadata values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s)",(str(Md_Experiment_uuid), str(ff_name), str(ff_version), str(simulation_type), str(md_engine), str(version), str(steps_time), str(Git_repo_name), str(Git_commit_hash), str('{}'),str(date)))
+    cur.execute("insert into cs_mdfps_schema.md_experiments_metadata values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s)",(str(Md_Experiment_uuid), str(ff_name), str(ff_version), str(simulation_type), str(md_engine), str(version), str(steps_time), str(Git_repo_name), str(Git_commit_hash), str('{"analysis":"ibacon"}'),str(date)))
     cn.commit()
     print('Metadata saved to database')
 else:

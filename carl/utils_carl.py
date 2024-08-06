@@ -18,7 +18,7 @@ from sklearn.preprocessing import StandardScaler
 
 from functools import reduce
 
-hostname = 'scotland'
+hostname = 'lebanon'
 dbname = 'cs_mdfps'
 username = 'cschiebroek'
 

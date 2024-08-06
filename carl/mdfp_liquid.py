@@ -50,7 +50,7 @@ Mdfp_Experiment_uuid = Md_Experiment_uuid
 mdfp_conf_uuid = uuid.uuid4()
 
 print('Connecting to database...')
-hostname = 'scotland'
+hostname = 'lebanon'
 dbname = 'cs_mdfps'
 username = 'cschiebroek'
 cn = psycopg2.connect(host=hostname, dbname=dbname, user=username)
