@@ -1,4 +1,4 @@
-import carl.Parameteriser as Parameteriser
+import Parameteriser as Parameteriser
 from Simulator import SolutionSimulator
 from Composer import SolutionComposer
 import mdtraj as md
