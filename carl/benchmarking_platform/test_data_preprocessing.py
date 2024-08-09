@@ -1,18 +1,11 @@
 import pytest
-from utils.data_preprocessing import preprocess_data
+from utils.data_preprocessing import preprocess_data,prepare_data
 import pandas as pd
 
 def test_preprocess_data():
-    # Create a mock DataFrame
-    data = {
-        'molregno': [1, 2, 3],
-        'vp_log10_pa': [0.5, 1.0, 1.5],
-        'rdkit': [[0, 1], [1, 0], [0, 0]],
-        'maccs': [[1, 0, 1], [0, 1, 0], [1, 1, 1]]
-    }
-    df = pd.DataFrame(data)
-    
-    train_molregnos, val_molregnos, train_y, val_y, df_train, df_val = preprocess_data(df, 42)
+    conn = 'dbname=cs_mdfps user=cschiebroek host=lebanon'
+    df = prepare_data(conn)
+    train_molregnos, val_molregnos, train_y, val_y, df_train, df_val = preprocess_data(df, i)
     
     assert not df_train.empty
     assert not df_val.empty
