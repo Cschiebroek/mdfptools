@@ -5,11 +5,15 @@ from rdkit import Chem
 from tqdm import tqdm
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+import json
 
 def calc_padel_descriptors(smiles):
     """Calculate PaDEL descriptors for a single molecule."""
-    descriptors_dict = from_smiles(smiles, fingerprints=True)  # You can adjust this to calculate only descriptors or fingerprints if needed
+    try:
+        descriptors_dict = from_smiles(smiles, fingerprints=True)  # You can adjust this to calculate only descriptors or fingerprints if needed
+    except RuntimeError:
+        logging.warning(f"Failed to calculate PaDEL descriptors for SMILES: {smiles}")
+        descriptors_dict = {}
     return descriptors_dict
 
 
@@ -47,7 +51,7 @@ def calculate_Padel_descriptors(df, conn):
 
     # Identify missing descriptors and calculate them
     try:
-        missing_descriptors = df[df['RDF130p'].isnull()]  # Replace 'RDF130p' with an actual column name
+        missing_descriptors = df[df['nHBDon_Lipinski'].isnull()]  
     except KeyError:
         missing_descriptors = df
     if not missing_descriptors.empty:
@@ -57,8 +61,18 @@ def calculate_Padel_descriptors(df, conn):
         missing_molblocks = missing_descriptors['molblock'].tolist()  # Replace 'smiles_column' with actual column name
         missing_smiles = [Chem.MolToSmiles(Chem.MolFromMolBlock(molblock)) for molblock in missing_molblocks]
         padel_results = []
-        for smiles in tqdm(missing_smiles):
-            padel_results.append(calc_padel_descriptors(smiles))
+        molregnos = missing_descriptors['molregno'].tolist()
+        for smiles, molregno in tqdm(zip(missing_smiles, molregnos)):
+            descriptors_dict = calc_padel_descriptors(smiles)
+            #directly store to database
+            cur = conn.cursor()
+            cur.execute(
+                'INSERT INTO cs_mdfps_schema.padeldescriptors(molregno, padeldescriptors) VALUES(%s, %s)',
+                (molregno, json.dumps(descriptors_dict))  # Store descriptors as JSON
+            )
+            conn.commit()
+
+            padel_results.append(descriptors_dict)
 
         padel_df = pd.DataFrame(padel_results)
         padel_df['molregno'] = missing_descriptors['molregno'].values

@@ -21,6 +21,7 @@ from descriptors.rdkit import calculate_RDKit_PhysChem_descriptors
 from descriptors.fingerprints import calculate_fingerprints
 from descriptors.codessa_descriptors import calculate_codessa_descriptor_df
 from descriptors.padel import calculate_Padel_descriptors
+from descriptors.polarizability import calculate_custom_descriptors
 
 from padelpy import from_smiles
 import os
@@ -80,6 +81,8 @@ def prepare_data(conn):
     df = calculate_fingerprints(df,'ecfp4')
     df = calculate_codessa_descriptor_df(df,conn)
     df = calculate_Padel_descriptors(df,conn)
+    df = calculate_custom_descriptors(df,conn)
+
 
     return df
 
@@ -140,7 +143,8 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
                 features = pickle.load(f)
         else:
             features = from_smiles('CCO').keys()
-
+    elif descriptor_name == 'customLR_features':        
+        features = ['polarizability', 'alcohol', 'carbonyl', 'amine', 'carboxylic_acid', 'nitro', 'nitrile']
         
 
 
@@ -155,7 +159,7 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
         train_X = [list(x) for x in train_X]
         val_X = [list(x) for x in val_X]
 
-    else:
+    if descriptor_name == 'RDKit_PhysChem' or descriptor_name == 'MDFP':
         df_train = df_train.drop(columns=['NumRotatableBonds'])
         df_train['NumRotatableBonds'] = df_train['molblock'].apply(lambda x: Descriptors.NumRotatableBonds(Chem.MolFromMolBlock(x)))
         df_val = df_val.drop(columns=['NumRotatableBonds'])
