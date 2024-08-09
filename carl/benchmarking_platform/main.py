@@ -92,7 +92,7 @@ def main(descriptors_to_use, models_to_evaluate):
 
     #save all data to a pickle to load again later
     data = {'reals_list': combined_reals, 'predictions_list': combined_preds, 'molregnos_list': combined_molregnos, 'combined_titles': combined_titles}
-    pd.to_pickle(data, 'all_models_descriptors.pkl')
+    pd.to_pickle(data, 'results/all_models_descriptors.pkl')
     
 
 if __name__ == "__main__":
