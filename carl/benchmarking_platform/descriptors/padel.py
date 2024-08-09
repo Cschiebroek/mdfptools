@@ -1,52 +1,79 @@
-from padelpy import padeldescriptor
 import pandas as pd
-import os
+from padelpy import from_smiles
+import logging
 from rdkit import Chem
+from tqdm import tqdm
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def calculate_padel_descriptors(df):
+
+def calc_padel_descriptors(smiles):
+    """Calculate PaDEL descriptors for a single molecule."""
+    descriptors_dict = from_smiles(smiles, fingerprints=True)  # You can adjust this to calculate only descriptors or fingerprints if needed
+    return descriptors_dict
+
+
+def get_padel_descriptors_from_db(conn):
+    """Fetch PaDEL descriptors from the database."""
+    query = """
+    SELECT molregno, padeldescriptors
+    FROM cs_mdfps_schema.padeldescriptors
     """
-    Calculate PaDEL descriptors for each molecule in the DataFrame.
-    
-    Parameters:
-    - df: pandas DataFrame containing the molecule information.
-    - smiles_col: Column name containing the SMILES strings or molecular data.
-    
-    Returns:
-    - df: Updated DataFrame with PaDEL descriptors.
-    """
-    # Specify the path to the PaDEL-Descriptor jar file
-    padel_jar_path = '/path/to/PaDEL-Descriptor/PaDEL-Descriptor.jar'
-    
-    # Create a temporary file to store SMILES strings
-    input_smiles_file = 'input_smiles.smi'
-    output_csv_file = 'padel_descriptors.csv'
-    
-    # Write the SMILES to the input file
-    df['smiles'] = df['molblock'].apply(lambda x: Chem.MolToSmiles(Chem.MolFromMolBlock(x)))
-    df['smiles'].to_csv(input_smiles_file, index=False, header=False)
+    df = pd.read_sql(query, conn)
 
-    # Run PaDEL-Descriptor
-    padeldescriptor(
-        mol_dir=input_smiles_file,
-        d_file=output_csv_file,
-        descriptors=True,
-        fingerprints=False,
-        convert3d=False,
-        retain3d=False,
-        threads=4,  # Adjust the number of threads if necessary
-        log=False,
-        waiting=False,
-        padel_path=padel_jar_path
-    )
+    # Ensure molregno is unique
+    df = df.drop_duplicates(subset=['molregno'])
 
-    # Read the output descriptors
-    padel_descriptors = pd.read_csv(output_csv_file)
+    # Normalize JSONB data directly
+    df_padel = pd.json_normalize(df['padeldescriptors'])
 
-    # Remove the temporary files
-    os.remove(input_smiles_file)
-    os.remove(output_csv_file)
+    # merge on molregno
+    df = df.merge(df_padel, on = 'molregno')
+    #drop the original padeldescriptors column
+    df = df.drop(columns=['padeldescriptors'])
     
-    # Merge PaDEL descriptors with the original DataFrame
-    df = pd.concat([df, padel_descriptors], axis=1)
-    
+    return df
+
+def calculate_Padel_descriptors(df, conn):
+    """Main function to fetch or calculate PaDEL descriptors."""
+    logging.info("Fetching PaDEL descriptors from the database...")
+
+    df_padel_descriptors = get_padel_descriptors_from_db(conn)
+
+    logging.info("Merging PaDEL descriptors with the main dataframe...")
+    df = df.drop_duplicates(subset=['molregno'])  # Ensure no duplicates in the main dataframe
+    #combine the two dataframes on molregno
+    df = pd.merge(df, df_padel_descriptors, on='molregno', how='left')
+
+    # Identify missing descriptors and calculate them
+    try:
+        missing_descriptors = df[df['RDF130p'].isnull()]  # Replace 'RDF130p' with an actual column name
+    except KeyError:
+        missing_descriptors = df
+    if not missing_descriptors.empty:
+        logging.info(f"Calculating PaDEL descriptors for {len(missing_descriptors)} molecules...")
+        
+        # Extract SMILES strings for missing molecules
+        missing_molblocks = missing_descriptors['molblock'].tolist()  # Replace 'smiles_column' with actual column name
+        missing_smiles = [Chem.MolToSmiles(Chem.MolFromMolBlock(molblock)) for molblock in missing_molblocks]
+        padel_results = []
+        for smiles in tqdm(missing_smiles):
+            padel_results.append(calc_padel_descriptors(smiles))
+
+        padel_df = pd.DataFrame(padel_results)
+        padel_df['molregno'] = missing_descriptors['molregno'].values
+        
+        # Insert the newly calculated descriptors into the database
+        cur = conn.cursor()
+        for i, row in padel_df.iterrows():
+            cur.execute(
+                'INSERT INTO cs_mdfps_schema.padeldescriptors(molregno, padeldescriptors) VALUES(%s, %s)',
+                (row['molregno'], row.to_json())  # Store descriptors as JSON
+            )
+        conn.commit()
+
+        # Merge the newly calculated descriptors back into the main dataframe
+        updated_descriptors_df = get_padel_descriptors_from_db(conn)
+        df.update(pd.merge(df, updated_descriptors_df, on='molregno', how='left'))
+
     return df

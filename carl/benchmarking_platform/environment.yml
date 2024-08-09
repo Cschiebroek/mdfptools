@@ -12,3 +12,6 @@ dependencies:
   - seaborn
   - psycopg2
   - pytest
+  - statsmodels
+  - padelpy
+  - tqdm

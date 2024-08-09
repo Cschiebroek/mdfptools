@@ -21,7 +21,7 @@ def calc_rdkit_descriptors(mol):
     descriptors_dict = dict(zip(descriptor_names, descriptor_values))
     return json.dumps(descriptors_dict)  # Convert dict to JSON string
 
-def calculate_rdkit_descriptors(df, conn):
+def calculate_RDKit_PhysChem_descriptors(df, conn):
     """Main function to fetch or calculate RDKit descriptors."""
     logging.info("Fetching RDKit descriptors from the database...")
 

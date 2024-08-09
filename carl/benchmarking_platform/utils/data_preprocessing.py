@@ -17,8 +17,14 @@ from sklearn.preprocessing import StandardScaler
 import logging
 import warnings
 from descriptors.mdfp import extract_mdfp_features
-from descriptors.rdkit import calculate_rdkit_descriptors
+from descriptors.rdkit import calculate_RDKit_PhysChem_descriptors
 from descriptors.fingerprints import calculate_fingerprints
+from descriptors.codessa_descriptors import calculate_codessa_descriptor_df
+from descriptors.padel import calculate_Padel_descriptors
+
+from padelpy import from_smiles
+import os
+import pickle
 
 # Disable pandas userwarning
 warnings.simplefilter(action='ignore', category=UserWarning)
@@ -68,10 +74,12 @@ def prepare_data(conn):
     logging.info("Calculating descriptors...")
     
     # Add descriptors
-    df = calculate_rdkit_descriptors(df,conn)
+    df = calculate_RDKit_PhysChem_descriptors(df,conn)
     df = extract_mdfp_features(df,conn)
     df = calculate_fingerprints(df,'maccs')
     df = calculate_fingerprints(df,'ecfp4')
+    df = calculate_codessa_descriptor_df(df,conn)
+    df = calculate_Padel_descriptors(df,conn)
 
     return df
 
@@ -94,9 +102,7 @@ def calc_descriptors(mol):
 
 
 def preprocess_data(df, seed):
-    logging.info("Splitting data into training and testing sets...")
-    df = df.loc[:, ~df.columns.duplicated()]
-    
+    logging.info("Splitting data into training and testing sets...")   
     # Split remaining data into training and validation sets
     train_molregnos, val_molregnos = train_test_split(df['molregno'].unique(), test_size=0.2, random_state=42 + seed)
     df_train = df[df['molregno'].isin(train_molregnos)]
@@ -111,7 +117,7 @@ def preprocess_data(df, seed):
     return train_molregnos, val_molregnos, train_y, val_y, df_train, df_val
 
 def get_features(df_train, df_val, descriptor_name, scale=False):
-    if descriptor_name == 'RDKit':
+    if descriptor_name == 'RDKit_PhysChem':
         features = [d[0] for d in Descriptors._descList if d[0] in df_train.columns]
     elif descriptor_name == 'MACCS':
         features = 'maccs'
@@ -125,6 +131,19 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
                      'water_intra_ene_mean', 'water_intra_ene_std', 'water_intra_ene_median', 'water_total_ene_mean',
                      'water_total_ene_std', 'water_total_ene_median', 'water_rgyr_mean', 'water_rgyr_std',
                      'water_rgyr_median', 'water_sasa_mean', 'water_sasa_std', 'water_sasa_median']
+    elif descriptor_name == 'codessa':
+        features = ['gravitationalindex', 'hdca', 'sa2_f', 'mnac_cl', 'sa_n']
+
+    elif descriptor_name == 'padel':
+        if os.path.exists('padel_names.pkl'):
+            with open('padel_names.pkl', 'rb') as f:
+                features = pickle.load(f)
+        else:
+            features = from_smiles('CCO').keys()
+
+        
+
+
     else:
         raise ValueError(f"Invalid descriptor name: {descriptor_name}")
 

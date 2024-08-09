@@ -20,11 +20,33 @@ models:
     n_neighbors: 5
   pls:
     n_components: 10
+  neural_network:
+    layers: [128, 64, 32]
+    activation: "relu"
+    epochs: 50
+    batch_size: 32
+    optimizer: "adam"
+    loss: "mse"
 
 descriptors:
   - RDKit
   - MDFP
   - MACCS
   - ECFP4
+  - CODESSA
+  - PaDEL
 
+descriptor_calculation:
+  codessa:
+    enabled: true
+    database_table: "cs_mdfps_schema.codessa_descriptors"
+  padel:
+    enabled: true
+    database_table: "cs_mdfps_schema.padeldescriptors"
+    fingerprints: true
+    threads: 4
 
+benchmark:
+  num_splits: 10
+  test_size: 0.2
+  random_state: 42
