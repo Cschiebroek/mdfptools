@@ -18,8 +18,8 @@ import logging
 import warnings
 from descriptors.mdfp import extract_mdfp_features
 from descriptors.rdkit import calculate_rdkit_descriptors
-from descriptors.fingerprints import calculate_maccs_keys, calculate_ecfp4
-from descriptors.padel import calculate_padel_descriptors
+from descriptors.fingerprints import calculate_fingerprints
+
 # Disable pandas userwarning
 warnings.simplefilter(action='ignore', category=UserWarning)
 
@@ -70,8 +70,8 @@ def prepare_data(conn):
     # Add descriptors
     df = calculate_rdkit_descriptors(df,conn)
     df = extract_mdfp_features(df,conn)
-    df = calculate_maccs_keys(df,conn)
-    df = calculate_ecfp4(df,conn)
+    df = calculate_fingerprints(df,'maccs')
+    df = calculate_fingerprints(df,'ecfp4')
 
     return df
 
