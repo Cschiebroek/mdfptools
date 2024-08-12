@@ -21,7 +21,7 @@ from descriptors.rdkit import calculate_RDKit_PhysChem_descriptors
 from descriptors.fingerprints import calculate_fingerprints
 from descriptors.codessa_descriptors import calculate_codessa_descriptor_df
 from descriptors.padel import calculate_Padel_descriptors
-from descriptors.polarizability import calculate_custom_descriptors
+from descriptors.polarizability import calculate_liang_descriptors_df
 
 from padelpy import from_smiles
 import os
@@ -75,14 +75,20 @@ def prepare_data(conn):
     logging.info("Calculating descriptors...")
     
     # Add descriptors
-    df = calculate_RDKit_PhysChem_descriptors(df,conn)
-    df = extract_mdfp_features(df,conn)
-    df = calculate_fingerprints(df,'maccs')
-    df = calculate_fingerprints(df,'ecfp4')
-    df = calculate_codessa_descriptor_df(df,conn)
-    df = calculate_Padel_descriptors(df,conn)
-    df = calculate_custom_descriptors(df,conn)
+    df = calculate_RDKit_PhysChem_descriptors(df, conn)
+    df = extract_mdfp_features(df, conn)
+    df = calculate_fingerprints(df, 'maccs')
+    df = calculate_fingerprints(df, 'ecfp4')
+    df = calculate_codessa_descriptor_df(df, conn)
+    df = calculate_Padel_descriptors(df, conn)
+    df = calculate_liang_descriptors_df(df, conn)
 
+    logging.info("Data loaded and descriptors calculated, dropping NaNs...")
+    # Drop rows with any NaNs
+    len_df_before = len(df)
+    df = df.dropna()
+    len_df_after = len_df_before - len(df)
+    logging.info(f"Dropped {len_df_after} rows due to missing values.")
 
     return df
 
@@ -143,7 +149,12 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
                 features = pickle.load(f)
         else:
             features = from_smiles('CCO').keys()
-    elif descriptor_name == 'customLR_features':        
+            features = [feature for feature in features if feature in df_train.columns]
+            #save the features to a file
+            with open('padel_names.pkl', 'wb') as f:
+                pickle.dump(features, f)
+
+    elif descriptor_name == 'liang_descriptors':
         features = ['polarizability', 'alcohol', 'carbonyl', 'amine', 'carboxylic_acid', 'nitro', 'nitrile']
         
 
@@ -153,11 +164,20 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
 
     # Ensure that the features are numeric
     train_X = df_train[features].apply(pd.to_numeric, errors='coerce')
-    val_X = df_val[features].apply(pd.to_numeric, errors='coerce')
+    val_X = df_val[features].apply(pd.to_numeric, errors='coerce')        
 
     if descriptor_name == 'ECFP4' or descriptor_name == 'MACCS':
         train_X = [list(x) for x in train_X]
         val_X = [list(x) for x in val_X]
+
+    else:
+        features = train_X.columns 
+        nans = train_X.isna().sum() + val_X.isna().sum()
+        nans = nans[nans > 0]
+        if len(nans) > 0:
+            logging.info(f"Removing {len(nans)} features with NaN values")
+            train_X = train_X.drop(columns=nans.index)
+            val_X = val_X.drop(columns=nans.index)
 
     if descriptor_name == 'RDKit_PhysChem' or descriptor_name == 'MDFP':
         df_train = df_train.drop(columns=['NumRotatableBonds'])

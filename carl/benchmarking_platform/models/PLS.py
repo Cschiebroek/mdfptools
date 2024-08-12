@@ -11,7 +11,3 @@ class PLSModel:
     def predict(self, X_test):
         return self.model.predict(X_test)
     
-    def evaluate(self, X_test, y_test):
-        y_pred = self.predict(X_test)
-        mse = mean_squared_error(y_test, y_pred)
-        return mse, y_pred

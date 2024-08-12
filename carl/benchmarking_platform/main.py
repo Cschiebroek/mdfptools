@@ -17,6 +17,8 @@ from models.neural_network import NeuralNetworkModel
 from models.linear_regression import MultilinearRegressionModel
 from models.svm import SVMModel
 from descriptors.padel import calculate_Padel_descriptors
+from models.custom_lr import custom_LR
+from descriptors.polarizability import calculate_liang_descriptors_df
 
 # Add the new model to the dictionary of available models
 model_classes = {
@@ -27,7 +29,7 @@ model_classes = {
     'kNN': KNNModel,
     'NeuralNetwork': NeuralNetworkModel,
     'MultilinearRegression': MultilinearRegressionModel,
-    'SVM': SVMModel
+    'SVM': SVMModel,
 }
 
 
@@ -42,7 +44,8 @@ descriptor_functions = {
     'MACCS': lambda df: calculate_fingerprints(df, fingerprint_type='maccs'),
     'ECFP4': lambda df: calculate_fingerprints(df, fingerprint_type='ecfp4'), 
     'codessa': calculate_codessa_descriptor_df,
-    'padel': calculate_Padel_descriptors
+    'padel': calculate_Padel_descriptors,
+    'liang_descriptors': calculate_liang_descriptors_df 
 }
 
 def main(descriptors_to_use, models_to_evaluate):
@@ -60,13 +63,14 @@ def main(descriptors_to_use, models_to_evaluate):
     y_list, molregno_list = [], []
 
     for i in range(10):  # Adjust the number of iterations as needed
-        logging.info(f"Training and evaluating split {i+1}...")
+        logging.info(f"Training and evaluating split {i+1}... \n \n \n")
         _, val_molregnos, train_y, val_y, df_train, df_val = preprocess_data(df, i)
 
         for descriptor in descriptors_to_use:
             logging.info(f"Extracting features for descriptor: {descriptor}")
             scale = descriptor in ['RDKit_PhysChem', 'MDFP']  # Scale only relevant descriptors
             train_X, val_X = get_features(df_train, df_val, descriptor, scale)
+
             for model_name in models_to_evaluate:
                 logging.info(f"Training and evaluating model: {model_name} with descriptor: {descriptor}")
 
@@ -80,6 +84,8 @@ def main(descriptors_to_use, models_to_evaluate):
                         logging.info(f"Shape of input: {len(train_X[0])}")
 
                     model.train(train_X, train_y, validation_data=(val_X, val_y))
+                elif model_name == 'customLR':
+                    model = custom_LR()
                 else:
                     model_class = model_classes[model_name]
                     model = model_class()
@@ -108,20 +114,18 @@ def main(descriptors_to_use, models_to_evaluate):
     # Plot all combinations in a single plot
     density_plots(reals_list=combined_reals, predictions_list=combined_preds, molregnos_list=combined_molregnos,
                   print_stats=True, bounds=None, title=combined_titles,
-                  name="padel", dims=(len(descriptors_to_use), len(models_to_evaluate)), thresholds=1)
+                  name="all", dims=(len(descriptors_to_use), len(models_to_evaluate)), thresholds=1)
 
     # Close the database connection
     conn.close()
 
-    #save all data to a pickle to load again later
+    # Save all data to a pickle to load again later
     data = {'reals_list': combined_reals, 'predictions_list': combined_preds, 'molregnos_list': combined_molregnos, 'combined_titles': combined_titles}
-    pd.to_pickle(data, 'results/padel.pkl')
-    
+    pd.to_pickle(data, 'results/all.pkl')
+
 
 if __name__ == "__main__":
-    # Example usage
-    descriptors_to_use = ['RDKit_PhysChem', 'MDFP', 'MACCS', 'ECFP4', 'codessa', 'padel']
     models_to_evaluate = ['XGBoost', 'PLS', 'Lasso', 'RandomForest', 'kNN', 'NeuralNetwork', 'MultilinearRegression']
-    descriptors_to_use = ['padel']
+    descriptors_to_use = ['padel','liang_descriptors', 'RDKit_PhysChem', 'MDFP', 'MACCS', 'ECFP4', 'codessa']
 
     main(descriptors_to_use, models_to_evaluate)
