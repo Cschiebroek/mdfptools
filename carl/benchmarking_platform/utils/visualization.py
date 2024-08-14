@@ -4,6 +4,8 @@ import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 from utils.stats import get_stats
+import seaborn as sns
+from scipy import stats
 
 def density_plots(reals_list, predictions_list, molregnos_list, print_stats=True, bounds=None, title=None, name=None, dims=(1, 3), thresholds=1):
     """
@@ -124,3 +126,101 @@ def density_plots(reals_list, predictions_list, molregnos_list, print_stats=True
         plt.savefig(f'{name}.png', dpi=800, bbox_inches='tight')
     else:
         plt.show()
+
+
+def compute_and_plot_statistic(data_path, statistic_name, thresholds, model_order, descriptor_order):
+    # Load the saved data
+    data = pd.read_pickle(data_path)
+
+    # Extract the relevant data
+    reals_list = data['reals_list']
+    predictions_list = data['predictions_list']
+    combined_titles = data['combined_titles']
+
+    # Calculate the specified statistic for each combination
+    all_stats = []  # to hold all statistic values for each combination
+    for real, pred, title in zip(reals_list, predictions_list, combined_titles):
+        stat_values = []
+        for real_vals, pred_vals in zip(real, pred):
+            stat_dict = get_stats(real_vals, pred_vals, thresholds)
+            stat_values.append(stat_dict[statistic_name])
+        all_stats.append(stat_values)
+
+    # Convert to DataFrame
+    df_stat = pd.DataFrame(all_stats).T
+
+    # Debugging: Check lengths
+    print(f"Length of combined_titles: {len(combined_titles)}")
+    print(f"Shape of df_stat: {df_stat.shape}")
+
+    if df_stat.shape[1] != len(combined_titles):
+        raise ValueError(f"Expected {len(combined_titles)} columns, but got {df_stat.shape[1]}.")
+
+    df_stat.columns = combined_titles
+
+    # Initialize lists to hold the data for the new DataFrame
+    models = []
+    descriptors = []
+    stat_values = []
+
+    # Loop through each column and split into model, descriptor, and append the data
+    for col in df_stat.columns:
+        model, descriptor = col.split(' (')
+        descriptor = descriptor.rstrip(')')
+        models.extend([model] * df_stat.shape[0])
+        descriptors.extend([descriptor] * df_stat.shape[0])
+        stat_values.extend(df_stat[col].values)
+
+    # Create a new DataFrame with the three columns
+    new_df = pd.DataFrame({
+        'Model': models,
+        'Descriptor': descriptors,
+        statistic_name: stat_values
+    })
+
+    # Group by Model and Descriptor, and calculate mean and 90% confidence intervals
+    grouped_df = new_df.groupby(['Model', 'Descriptor']).agg(
+        stat_mean=(statistic_name, 'mean'),
+        stat_std=(statistic_name, 'std'),
+        stat_count=(statistic_name, 'count')
+    ).reset_index()
+
+    # Calculate 90% confidence interval
+    grouped_df['CI'] = grouped_df.apply(
+        lambda row: stats.norm.interval(0.90, loc=row['stat_mean'], scale=row['stat_std'] / np.sqrt(row['stat_count'])),
+        axis=1
+    )
+
+    # Convert the 'Model' and 'Descriptor' columns to categorical types with the defined order
+    grouped_df['Model'] = pd.Categorical(grouped_df['Model'], categories=model_order, ordered=True)
+    grouped_df['Descriptor'] = pd.Categorical(grouped_df['Descriptor'], categories=descriptor_order, ordered=True)
+
+    # Re-sort the DataFrame based on the new categorical order
+    grouped_df = grouped_df.sort_values(['Descriptor', 'Model'])
+
+    # Pivot the DataFrame for heatmap
+    heatmap_data = grouped_df.pivot(index="Descriptor", columns="Model", values="stat_mean")
+
+    # Plot the heatmap
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(heatmap_data, annot=False, cmap="coolwarm", fmt=".2f", linewidths=.5, cbar=True)
+
+    plt.title(f"Heatmap of Mean {statistic_name} Values by Model and Descriptor")
+    plt.xlabel("Model")
+    plt.ylabel("Descriptor")
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+
+    # Add text boxes with the 90% CI
+    for i in range(heatmap_data.shape[0]):
+        for j in range(heatmap_data.shape[1]):
+            mean_val = heatmap_data.iloc[i, j]
+            ci = grouped_df[(grouped_df['Descriptor'] == heatmap_data.index[i]) & 
+                            (grouped_df['Model'] == heatmap_data.columns[j])]['CI'].values[0]
+            ci_text = f"{ci[0]:.2f} - {ci[1]:.2f}"
+            plt.text(j + 0.5, i + 0.5, f"{mean_val:.2f}\n{ci_text}",
+                     ha='center', va='center', color='black', fontsize=8)
+
+    plt.show()
+
+

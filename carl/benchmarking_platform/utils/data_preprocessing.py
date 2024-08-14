@@ -178,6 +178,7 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
             logging.info(f"Removing {len(nans)} features with NaN values")
             train_X = train_X.drop(columns=nans.index)
             val_X = val_X.drop(columns=nans.index)
+        features = train_X.columns
 
     if descriptor_name == 'RDKit_PhysChem' or descriptor_name == 'MDFP':
         df_train = df_train.drop(columns=['NumRotatableBonds'])

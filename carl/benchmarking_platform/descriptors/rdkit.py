@@ -5,27 +5,21 @@ import json
 
 def get_rdkit_descriptors_from_db(conn):
     """Fetch RDKit descriptors from the database."""
-    query = """
+    # Ensure molregnos is a flat list of unique integers
+    query = f"""
     SELECT molregno, PhysChemDescriptors
     FROM cs_mdfps_schema.PhysChemDescriptors
     """
     df = pd.read_sql(query, conn)
-    
-    # If PhysChemDescriptors is a JSON string, convert it to individual columns
-    df_descriptors = pd.json_normalize(df['PhysChemDescriptors'].apply(json.loads))
-    df = pd.concat([df.drop(['PhysChemDescriptors'], axis=1), df_descriptors], axis=1)
-    
+    df = pd.concat([df.drop(['physchemdescriptors'], axis=1), df['physchemdescriptors'].apply(pd.Series)], axis=1)
     return df
 
 def calc_rdkit_descriptors(mol):
     """Calculate RDKit descriptors for a single molecule."""
-    try:
-        descriptor_values = Descriptors.CalcMolDescriptors(mol)
-        descriptors_dict = dict(zip([desc[0] for desc in Descriptors._descList], descriptor_values))
-        return descriptors_dict
-    except Exception as e:
-        logging.error(f"Failed to calculate RDKit descriptors: {e}")
-        return {}
+    descriptor_names = [desc[0] for desc in Descriptors._descList]
+    descriptor_values = Descriptors.CalcMolDescriptors(mol)
+    descriptors_dict = dict(zip(descriptor_names, descriptor_values))
+    return json.dumps(descriptors_dict)  # Convert dict to JSON string
 
 def calculate_RDKit_PhysChem_descriptors(df, conn):
     """Main function to fetch or calculate RDKit descriptors."""
@@ -41,15 +35,15 @@ def calculate_RDKit_PhysChem_descriptors(df, conn):
     if not missing_descriptors.empty:
         logging.info(f"Calculating RDKit descriptors for {len(missing_descriptors)} molecules...")
         PandasTools.AddMoleculeColumnToFrame(missing_descriptors, smilesCol='molblock')
-
+        cur = conn.cursor()
+        
         missing_descriptors['PhysChemDescriptors'] = missing_descriptors['ROMol'].apply(calc_rdkit_descriptors)
         
-        # Insert the newly calculated descriptors into the database
-        cur = conn.cursor()
+        # Insert the missing descriptors into the database
         for i, row in missing_descriptors.iterrows():
             cur.execute(
-                'INSERT INTO cs_mdfps_schema.PhysChemDescriptors (molregno, PhysChemDescriptors) VALUES (%s, %s)',
-                (row['molregno'], json.dumps(row['PhysChemDescriptors']))
+                'INSERT INTO cs_mdfps_schema.PhysChemDescriptors(molregno, PhysChemDescriptors) VALUES(%s, %s)',
+                (row['molregno'], row['PhysChemDescriptors'])
             )
         conn.commit()
 

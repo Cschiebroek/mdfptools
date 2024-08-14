@@ -19,6 +19,8 @@ from models.svm import SVMModel
 from descriptors.padel import calculate_Padel_descriptors
 from models.custom_lr import custom_LR
 from descriptors.polarizability import calculate_liang_descriptors_df
+from models.elasticnet import ElasticNetModel
+from models.ridge_regression import RidgeModel
 
 # Add the new model to the dictionary of available models
 model_classes = {
@@ -30,6 +32,8 @@ model_classes = {
     'NeuralNetwork': NeuralNetworkModel,
     'MultilinearRegression': MultilinearRegressionModel,
     'SVM': SVMModel,
+    'ElasticNet': ElasticNetModel,
+    'RidgeRegression': RidgeModel
 }
 
 
@@ -68,7 +72,7 @@ def main(descriptors_to_use, models_to_evaluate):
 
         for descriptor in descriptors_to_use:
             logging.info(f"Extracting features for descriptor: {descriptor}")
-            scale = descriptor in ['RDKit_PhysChem', 'MDFP']  # Scale only relevant descriptors
+            scale = descriptor not in ['ECFP4', 'MACCS']  # Scale only relevant descriptors
             train_X, val_X = get_features(df_train, df_val, descriptor, scale)
 
             for model_name in models_to_evaluate:
@@ -111,21 +115,22 @@ def main(descriptors_to_use, models_to_evaluate):
             combined_reals.append(y_list)
             combined_molregnos.append(molregno_list)
 
-    # Plot all combinations in a single plot
-    density_plots(reals_list=combined_reals, predictions_list=combined_preds, molregnos_list=combined_molregnos,
-                  print_stats=True, bounds=None, title=combined_titles,
-                  name="all", dims=(len(descriptors_to_use), len(models_to_evaluate)), thresholds=1)
+    # # Plot all combinations in a single plot
+    # density_plots(reals_list=combined_reals, predictions_list=combined_preds, molregnos_list=combined_molregnos,
+    #               print_stats=True, bounds=None, title=combined_titles,
+    #               name="more_linear_models", dims=(len(descriptors_to_use), len(models_to_evaluate)), thresholds=1)
 
     # Close the database connection
     conn.close()
 
     # Save all data to a pickle to load again later
     data = {'reals_list': combined_reals, 'predictions_list': combined_preds, 'molregnos_list': combined_molregnos, 'combined_titles': combined_titles}
-    pd.to_pickle(data, 'results/all.pkl')
+    pd.to_pickle(data, 'results/more_linear_models.pkl')
 
 
 if __name__ == "__main__":
-    models_to_evaluate = ['XGBoost', 'PLS', 'Lasso', 'RandomForest', 'kNN', 'NeuralNetwork', 'MultilinearRegression']
+    models_to_evaluate = ['XGBoost', 'PLS', 'Lasso', 'RandomForest', 'kNN', 'NeuralNetwork', 'MultilinearRegression', 'SVM', 'ElasticNet', 'RidgeRegression']
     descriptors_to_use = ['padel','liang_descriptors', 'RDKit_PhysChem', 'MDFP', 'MACCS', 'ECFP4', 'codessa']
+
 
     main(descriptors_to_use, models_to_evaluate)

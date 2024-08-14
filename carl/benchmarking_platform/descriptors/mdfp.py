@@ -2,9 +2,6 @@ import pandas as pd
 import logging
 import json
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 def extract_mdfp_features(df_1, conn):
     query = """
     SELECT 
@@ -34,42 +31,35 @@ def extract_mdfp_features(df_1, conn):
     df = pd.DataFrame(data, columns=['molregno', 'conf_id', 'vp_log10_pa', 'mdfp', 'molblock', 'md_experiment_uuid', 'confgen_uuid'])
 
     # Filter the DataFrame based on specific md_experiment_uuid
-    allowed_md_experiment_uuids = [
-        "fc57851e-b654-4338-bcdd-faa28ec66253",
-        '7a5837f2-e4ad-4e17-a2c3-6e5e956f938b',
-        '26dee5cf-c401-4924-9c43-6e5f8f311763'
-    ]
-    df = df[df['md_experiment_uuid'].isin(allowed_md_experiment_uuids)]
-    df = df.dropna(subset=['mdfp'])
+    allowed_d_experiment_uuids = [
+   "fc57851e-b654-4338-bcdd-faa28ec66253",
+   '7a5837f2-e4ad-4e17-a2c3-6e5e956f938b',
+   '26dee5cf-c401-4924-9c43-6e5f8f311763'
+]
+    df = df[df['md_experiment_uuid'].isin(allowed_d_experiment_uuids)]
+    df = df.dropna(subset=['mdfp']) 
 
-    # Extract the 'mdfp' vector from JSON and handle potential errors
-    def extract_mdfp_vector(mdfp_str):
-        try:
-            return json.loads(mdfp_str)['mdfp'] if mdfp_str else None
-        except (json.JSONDecodeError, TypeError) as e:
-            logging.error(f"Error decoding JSON: {e}")
-            return None
-
-    df['mdfp_vec'] = df['mdfp'].apply(extract_mdfp_vector)
-    
+    # Extract the 'mdfp' key from the dictionary
+    df['mdfp_vec'] = df['mdfp'].apply(lambda val: val['mdfp'] if val and 'mdfp' in val else None)
+    mdfp_vecs = df['mdfp_vec'].tolist()
+    #json loads to actual lsits
+    mdfp_vecs_lists = [json.loads(mdfp_vec) for mdfp_vec in mdfp_vecs]
     # Define MDFP feature names
-    mdfp_features_all = [
-        'NumHeavyAtoms', 'NumRotatableBonds', 'NumN', 'NumO', 'NumF', 'NumP', 'NumS', 'NumCl', 'NumBr', 'NumI',
-        'water_intra_crf_mean', 'water_intra_crf_std', 'water_intra_crf_median', 'water_intra_lj_mean',
-        'water_intra_lj_std', 'water_intra_lj_median', 'water_total_crf_mean', 'water_total_crf_std',
-        'water_total_crf_median', 'water_total_lj_mean', 'water_total_lj_std', 'water_total_lj_median',
-        'water_intra_ene_mean', 'water_intra_ene_std', 'water_intra_ene_median', 'water_total_ene_mean',
-        'water_total_ene_std', 'water_total_ene_median', 'water_rgyr_mean', 'water_rgyr_std',
-        'water_rgyr_median', 'water_sasa_mean', 'water_sasa_std', 'water_sasa_median'
-    ]
+    mdfp_features_all = ['NumHeavyAtoms', 'NumRotatableBonds', 'NumN', 'NumO', 'NumF', 'NumP', 'NumS', 'NumCl', 'NumBr', 'NumI',
+                         'water_intra_crf_mean', 'water_intra_crf_std', 'water_intra_crf_median', 'water_intra_lj_mean',
+                         'water_intra_lj_std', 'water_intra_lj_median', 'water_total_crf_mean', 'water_total_crf_std',
+                         'water_total_crf_median', 'water_total_lj_mean', 'water_total_lj_std', 'water_total_lj_median',
+                         'water_intra_ene_mean', 'water_intra_ene_std', 'water_intra_ene_median', 'water_total_ene_mean',
+                         'water_total_ene_std', 'water_total_ene_median', 'water_rgyr_mean', 'water_rgyr_std',
+                         'water_rgyr_median', 'water_sasa_mean', 'water_sasa_std', 'water_sasa_median']
 
-    # Extract MDFP features and add them to the DataFrame
-    mdfp_vecs_lists = df['mdfp_vec'].tolist()
     for i, mdfp_feature in enumerate(mdfp_features_all):
-        df[mdfp_feature] = pd.Series([vec[i] if vec else None for vec in mdfp_vecs_lists])
+        df[mdfp_feature] = [mdfp_vec[i] if mdfp_vec else None for mdfp_vec in mdfp_vecs_lists]
 
-    # Merge with the original DataFrame, on molregno
-    df_combined = pd.merge(df_1, df, on='molregno', how='left')
+    # Ensure molregno is unique in df_1
+    # df_1 = df_1.drop(columns=[col for col in df_1.columns if col in df.columns], errors='ignore')
 
-    logging.info(f"Processed {len(df_combined)} records, merged MDFP features.")
+    # Merge with the original DataFrame, on molregno, keeping only those that match, and no duplicate columns
+    df_combined = pd.merge(df_1, df, on='molregno', how='left', suffixes=('', '_y'))
+
     return df_combined
