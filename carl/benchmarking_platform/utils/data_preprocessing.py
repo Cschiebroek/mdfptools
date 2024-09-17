@@ -17,11 +17,12 @@ from sklearn.preprocessing import StandardScaler
 import logging
 import warnings
 from descriptors.mdfp import extract_mdfp_features
-from descriptors.rdkit import calculate_RDKit_PhysChem_descriptors
-from descriptors.fingerprints import calculate_fingerprints
+from descriptors.rdkit_physchem_decriptors import calculate_RDKit_PhysChem_descriptors
+from descriptors.fingerprints import calculate_bit_fingerprints, calculate_count_fingerprints
 from descriptors.codessa_descriptors import calculate_codessa_descriptor_df
 from descriptors.padel import calculate_Padel_descriptors
 from descriptors.polarizability import calculate_liang_descriptors_df
+from descriptors.atom_contrib import EMPTY_DICT, add_crippen_atom_counts_to_df
 
 from padelpy import from_smiles
 import os
@@ -64,7 +65,7 @@ def get_data_from_db(conn):
     df = df.dropna(subset=['mdfp'])
     return df
 
-def prepare_data(conn):
+def prepare_data(conn,descriptor_to_use):
     logging.info("Loading data from the database...")
     df = get_data_from_db(conn)
 
@@ -75,14 +76,25 @@ def prepare_data(conn):
     logging.info("Calculating descriptors...")
     
     # Add descriptors
-    df = calculate_RDKit_PhysChem_descriptors(df, conn)
-    df = extract_mdfp_features(df, conn)
-    df = calculate_fingerprints(df, 'maccs')
-    df = calculate_fingerprints(df, 'ecfp4')
-    df = calculate_codessa_descriptor_df(df, conn)
-    df = calculate_Padel_descriptors(df, conn)
-    df = calculate_liang_descriptors_df(df, conn)
-
+    if 'rdkit_physchem' in descriptor_to_use:
+        df = calculate_RDKit_PhysChem_descriptors(df, conn)
+    if 'mdfp' in descriptor_to_use:
+        df = extract_mdfp_features(df, conn)
+    if 'maccs' in descriptor_to_use:
+        df = calculate_bit_fingerprints(df, 'maccs')
+    if 'ecfp4' in descriptor_to_use:
+        df = calculate_bit_fingerprints(df, 'ecfp4')
+    if 'ecfp4_count' in descriptor_to_use:
+        df = calculate_count_fingerprints(df, 'ecfp4')
+    if 'codessa' in descriptor_to_use:
+        df = calculate_codessa_descriptor_df(df, conn)
+    if 'padel' in descriptor_to_use:
+        df = calculate_Padel_descriptors(df, conn)
+    if 'liang_descriptors' in descriptor_to_use:
+        df = calculate_liang_descriptors_df(df, conn)
+    if 'crippen_atoms' in descriptor_to_use:
+        df = add_crippen_atom_counts_to_df(df)
+    logging.info(df.columns)
     logging.info("Data loaded and descriptors calculated, dropping NaNs...")
     # Drop rows with any NaNs
     len_df_before = len(df)
@@ -125,23 +137,18 @@ def preprocess_data(df, seed):
 
     return train_molregnos, val_molregnos, train_y, val_y, df_train, df_val
 
+def get_features_from_config(descriptor_name):
+    with open('configs/descriptors.json', 'r') as file:
+        config = json.load(file)
+    if descriptor_name in config['descriptors']:
+        return config['descriptors'][descriptor_name]['features']
+    else:
+        raise ValueError(f"Descriptor '{descriptor_name}' not found in configuration.")
+
+
 def get_features(df_train, df_val, descriptor_name, scale=False):
     if descriptor_name == 'RDKit_PhysChem':
         features = [d[0] for d in Descriptors._descList if d[0] in df_train.columns]
-    elif descriptor_name == 'MACCS':
-        features = 'maccs'
-    elif descriptor_name == 'ECFP4':
-        features = 'ecfp4'
-    elif descriptor_name == 'MDFP':
-        features = ['NumHeavyAtoms', 'NumRotatableBonds', 'NumN', 'NumO', 'NumF', 'NumP', 'NumS', 'NumCl', 'NumBr', 'NumI',
-                     'water_intra_crf_mean', 'water_intra_crf_std', 'water_intra_crf_median', 'water_intra_lj_mean',
-                     'water_intra_lj_std', 'water_intra_lj_median', 'water_total_crf_mean', 'water_total_crf_std',
-                     'water_total_crf_median', 'water_total_lj_mean', 'water_total_lj_std', 'water_total_lj_median',
-                     'water_intra_ene_mean', 'water_intra_ene_std', 'water_intra_ene_median', 'water_total_ene_mean',
-                     'water_total_ene_std', 'water_total_ene_median', 'water_rgyr_mean', 'water_rgyr_std',
-                     'water_rgyr_median', 'water_sasa_mean', 'water_sasa_std', 'water_sasa_median']
-    elif descriptor_name == 'codessa':
-        features = ['gravitationalindex', 'hdca', 'sa2_f', 'mnac_cl', 'sa_n']
 
     elif descriptor_name == 'padel':
         if os.path.exists('padel_names.pkl'):
@@ -155,18 +162,23 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
                 pickle.dump(features, f)
 
     elif descriptor_name == 'liang_descriptors':
-        features = ['polarizability', 'alcohol', 'carbonyl', 'amine', 'carboxylic_acid', 'nitro', 'nitrile']
-        
-
+        features = ['polarizability', 'hydroxyl', 'carbonyl', 'amine', 'carboxylic_acid', 'nitro', 'nitrile']
+    elif descriptor_name == 'crippen_atoms':
+        features = list(EMPTY_DICT.keys())
 
     else:
-        raise ValueError(f"Invalid descriptor name: {descriptor_name}")
+        try:
+            features = get_features_from_config(descriptor_name)
+        except ValueError:
+            raise ValueError(f"Descriptor '{descriptor_name}' not found in configuration.")
+
+
 
     # Ensure that the features are numeric
     train_X = df_train[features].apply(pd.to_numeric, errors='coerce')
     val_X = df_val[features].apply(pd.to_numeric, errors='coerce')        
 
-    if descriptor_name == 'ECFP4' or descriptor_name == 'MACCS':
+    if descriptor_name == 'ECFP4_bit' or descriptor_name == 'ECFP4_count' or descriptor_name == 'MACCS':
         train_X = [list(x) for x in train_X]
         val_X = [list(x) for x in val_X]
 

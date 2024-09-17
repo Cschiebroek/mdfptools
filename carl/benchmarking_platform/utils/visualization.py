@@ -224,3 +224,104 @@ def compute_and_plot_statistic(data_path, statistic_name, thresholds, model_orde
     plt.show()
 
 
+def density_plot_single(reals_list, predictions_list, molregnos_list, print_stats=True, bounds=None, title=None, name=None, thresholds=1):
+    """
+    Generate a density plot comparing real vs predicted values for a single model/descriptor combination over 10 splits.
+
+    Parameters:
+    reals_list (list of lists): List of real values for multiple datasets (10 splits)
+    predictions_list (list of lists): List of predicted values for multiple datasets (10 splits)
+    molregnos_list (list of lists): List of molecular IDs for multiple datasets (10 splits)
+    print_stats (bool): Whether to print statistical metrics on the plots
+    bounds (tuple): Bounds for the axes
+    title (str): Title for the plot
+    name (str): File name to save the plot; if None, the plot is shown
+    thresholds (list or float): Threshold(s) for calculating the fraction of errors below this value
+    """
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Collect stats for each set of predictions
+    stats_list = [get_stats(reals, predictions, thresholds) for reals, predictions in zip(reals_list, predictions_list)]
+
+    # Calculate means and confidence intervals for each metric
+    rmse_mean = np.mean([stat['RMSE'] for stat in stats_list])
+    mae_mean = np.mean([stat['MAE'] for stat in stats_list])
+    kt_mean = np.mean([stat['KendallTau'] for stat in stats_list])
+    median_AE_mean = np.mean([stat['MedianAE'] for stat in stats_list])
+
+    rmse_90_low, rmse_90_high = stats.norm.interval(0.90, loc=rmse_mean, scale=stats.sem([stat['RMSE'] for stat in stats_list]))
+    mae_90_low, mae_90_high = stats.norm.interval(0.90, loc=mae_mean, scale=stats.sem([stat['MAE'] for stat in stats_list]))
+    kt_90_low, kt_90_high = stats.norm.interval(0.90, loc=kt_mean, scale=stats.sem([stat['KendallTau'] for stat in stats_list]))
+    median_AE_90_low, median_AE_90_high = stats.norm.interval(0.90, loc=median_AE_mean, scale=stats.sem([stat['MedianAE'] for stat in stats_list]))
+
+    ebo_means = {}
+    ebo_cis = {}
+    if isinstance(thresholds, list):
+        for threshold in thresholds:
+            ebo_values = [stat[f'Error_below_{threshold}'] for stat in stats_list]
+            ebo_means[threshold] = np.mean(ebo_values)
+            ebo_cis[threshold] = stats.norm.interval(0.90, loc=np.mean(ebo_values), scale=stats.sem(ebo_values))
+    else:
+        ebo_values = [stat[f'Error_below_{thresholds}'] for stat in stats_list]
+        ebo_means[thresholds] = np.mean(ebo_values)
+        ebo_cis[thresholds] = stats.norm.interval(0.90, loc=np.mean(ebo_values), scale=stats.sem(ebo_values))
+
+    # Group data by molregno to calculate mean predictions and true values
+    mrn = [item for sublist in molregnos_list for item in sublist]
+    real = [item for sublist in reals_list for item in sublist]
+    prediction = [item for sublist in predictions_list for item in sublist]
+
+    df = pd.DataFrame({'molregno': mrn, 'real': real, 'prediction': prediction})
+    df = df.groupby('molregno').mean()
+    real = df['real'].tolist()
+    prediction = df['prediction'].tolist()
+
+    # Plotting
+    ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real), max(prediction + real)], 'k-')
+    ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real) - 1, max(prediction + real) - 1], 'k--')
+    ax.plot([min(prediction + real), max(prediction + real)], [min(prediction + real) + 1, max(prediction + real) + 1], 'k--')
+
+    dens_u = sm.nonparametric.KDEMultivariate(data=[real, prediction], var_type='cc', bw='normal_reference')
+    z = dens_u.pdf([real, prediction])
+
+    sc = ax.scatter(real, prediction, lw=0, c=z, s=10, alpha=0.9)
+
+    ax.set_xlabel(r'Exp. VP (log10 Pa)', fontsize=14)
+    ax.set_ylabel(r'Predicted VP (log10 Pa)', fontsize=14)
+    ax.grid(True, which="both")
+
+    if bounds is None:
+        lower = min(prediction + real) - 2
+        upper = max(prediction + real) + 2
+    else:
+        lower = bounds[0]
+        upper = bounds[1]
+
+    ax.axis([lower, upper, lower, upper])
+
+    if print_stats:
+        stats_text = (
+            f'RMSE: {rmse_mean:.2f} ({rmse_90_low:.2f}-{rmse_90_high:.2f})\n'
+            f'Median AE: {median_AE_mean:.2f} ({median_AE_90_low:.2f}-{median_AE_90_high:.2f})\n'
+            f'Mean AE: {mae_mean:.2f} ({mae_90_low:.2f}-{mae_90_high:.2f})\n'
+            f'Kendalls Tau: {kt_mean:.2f} ({kt_90_low:.2f}-{kt_90_high:.2f})'
+        )
+
+        for threshold, ebo_mean in ebo_means.items():
+            ebo_low, ebo_high = ebo_cis[threshold]
+            stats_text += f'\nFrac AE < {threshold}: {ebo_mean:.2f} ({ebo_low:.2f}-{ebo_high:.2f})'
+
+        ax.text(0.45, 0.25, stats_text,
+                transform=ax.transAxes, fontsize=14, verticalalignment='top',
+                bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+
+    if title is not None:
+        ax.set_title(title, fontsize=14)
+
+    ax.set_aspect('equal', 'box')
+
+    if name:
+        plt.savefig(f'{name}.png', dpi=800, bbox_inches='tight')
+    else:
+        plt.show()
