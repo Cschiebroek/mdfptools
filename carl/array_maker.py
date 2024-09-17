@@ -1,12 +1,47 @@
 import pandas as pd
 
-df = pd.read_csv('/localhome/cschiebroek/MDFP_VP/mdfptools/carl/data_curation/cs_mdfps_schema_experimental_data.csv')
-#keep only vp < 5
-df = df[df['vp_log10_pa'] < 5]
-print(len(df))
-confids = df['conf_id'].tolist()
-with open('gas_phase.txt','w') as file:
-    for confid in confids:
-        command = f'{confid} 5166be97-ef21-4cc5-bee1-719c7b9e3397'
+confid_list = [16786,
+17270,
+ 17271,
+ 17273,
+ 17274,
+ 17276,
+ 17278,
+ 17277,
+ 17280,
+ 17281,
+ 17282,
+ 17288,
+ 17289,
+ 17290,
+ 17291,
+ 17292,
+ 17293,
+ 17295,
+ 17297,
+ 17298,
+ 17304,
+ 17306,
+ 17307,
+ 17311,
+ 17313,
+ 17314,
+ 17315,
+ 17317,
+ 17318,
+ 17320,
+ 17322,
+ 17326,
+ 17335,
+ 17336,
+ 17341,
+ 17342,
+ 17343,
+ 17345,
+ 17347]
+
+with open('ibacon.txt','w') as file:
+    for confid in confid_list:
+        command = f'{confid} 13d08336-fb79-4042-83ce-af906193ff20'
         file.write(command + '\n')
 file.close()

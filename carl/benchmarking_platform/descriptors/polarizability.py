@@ -2,17 +2,21 @@ import pandas as pd
 import logging
 from serenityff.charge.tree.dash_tree import DASHTree, TreeType
 from rdkit import Chem
+from rdkit.Chem import Fragments
 
-# Define SMARTS patterns for functional groups
-functional_group_smarts = {
-    'amine': '[NX3]',  # Amine group
-    'carbonyl': '[CX3]=[O]',  # Carbonyl group
-    'carboxylic_acid': '[CX3](=O)[OX2H1]',  # Carboxylic acid group
-    'hydroxyl': '[OX2H]',  # Hydroxyl group
-    'nitrile': '[CX2]#[NX1]',  # Nitrile group
-    'nitro': '[NX3](=O)(=O)',  # Nitro group
-    'alcohol': '[CX4][OX2H]'  # Alcohol group
-}
+def wipe_existing_descriptors(conn):
+    """Wipe existing entries in the Liang descriptors table."""
+    logging.info("Wiping existing Liang descriptors from the database...")
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM cs_mdfps_schema.liang_descriptors_dash")
+        conn.commit()
+
+def wipe_existing_results(conn):
+    """Wipe existing entries in the results database related to these descriptors."""
+    logging.info("Wiping existing results related to Liang descriptors from the results database...")
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM results_database WHERE descriptor IN ('polarizability', 'amine', 'carbonyl', 'carboxylic_acid', 'hydroxyl', 'nitrile', 'nitro', 'alcohol')")
+        conn.commit()
 
 def get_liang_descriptors_from_db(conn):
     """Fetch Liang descriptors from the database."""
@@ -34,26 +38,31 @@ def calculate_dashtree_polarizability(molblock, tree):
         polarizability = None
     return polarizability
 
-def count_functional_groups(molblock, func_group):
-    """Count the number of functional groups in a molecule."""
+def count_functional_groups(molblock):
+    """Count functional groups using RDKit fragment functions."""
     mol = Chem.MolFromMolBlock(molblock)
-    smarts = functional_group_smarts[func_group]
-    patt = Chem.MolFromSmarts(smarts)
-    return len(mol.GetSubstructMatches(patt))
+    descriptors = {
+        'amine': Fragments.fr_NH1(mol) + Fragments.fr_NH2(mol),
+        'carbonyl': Fragments.fr_C_O(mol),
+        'carboxylic_acid': Fragments.fr_COO(mol),
+        'hydroxyl': Fragments.fr_Al_OH(mol) + Fragments.fr_Ar_OH(mol),
+        'nitrile': Fragments.fr_nitrile(mol),
+        'nitro': Fragments.fr_nitro(mol),
+        'alcohol': Fragments.fr_Al_OH(mol)
+    }
+    return descriptors
 
 def calculate_liang_descriptors(molblock, tree):
     """Calculate Liang descriptors for a single molecule."""
     descriptors = {
         'polarizability': calculate_dashtree_polarizability(molblock, tree)
     }
-    for func_group in functional_group_smarts.keys():
-        descriptors[func_group] = count_functional_groups(molblock, func_group)
+    descriptors.update(count_functional_groups(molblock))
     return descriptors
 
 def calculate_liang_descriptors_df(df, conn):
-    """Main function to fetch or calculate Liang descriptors."""
-    logging.info("Fetching Liang descriptors from the database...")
 
+    logging.info("Fetching Liang descriptors from the database...")
     df_liang_descriptors = get_liang_descriptors_from_db(conn)
     
     logging.info("Merging Liang descriptors with the main dataframe...")
