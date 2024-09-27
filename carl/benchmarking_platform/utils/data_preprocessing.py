@@ -74,17 +74,18 @@ def prepare_data(conn,descriptor_to_use):
     df = df[~df['molregno'].isin(df_test['molregno'])]
 
     logging.info("Calculating descriptors...")
-    
+
+
     # Add descriptors
-    if 'rdkit_physchem' in descriptor_to_use:
+    if 'RDKit_PhysChem' in descriptor_to_use:
         df = calculate_RDKit_PhysChem_descriptors(df, conn)
-    if 'mdfp' in descriptor_to_use:
+    if 'MDFP' in descriptor_to_use:
         df = extract_mdfp_features(df, conn)
-    if 'maccs' in descriptor_to_use:
+    if 'MACCS' in descriptor_to_use:
         df = calculate_bit_fingerprints(df, 'maccs')
-    if 'ecfp4' in descriptor_to_use:
+    if 'ECFP4_bit' in descriptor_to_use:
         df = calculate_bit_fingerprints(df, 'ecfp4')
-    if 'ecfp4_count' in descriptor_to_use:
+    if 'ECFP4_count' in descriptor_to_use:
         df = calculate_count_fingerprints(df, 'ecfp4')
     if 'codessa' in descriptor_to_use:
         df = calculate_codessa_descriptor_df(df, conn)
@@ -189,16 +190,23 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
         if len(nans) > 0:
             logging.info(f"Removing {len(nans)} features with NaN values")
             train_X = train_X.drop(columns=nans.index)
-            val_X = val_X.drop(columns=nans.index)
         features = train_X.columns
 
     if descriptor_name == 'RDKit_PhysChem' or descriptor_name == 'MDFP':
-        df_train = df_train.drop(columns=['NumRotatableBonds'])
+        try:
+            df_train = df_train.drop(columns=['NumRotatableBonds'])
+        except KeyError:
+            pass
         df_train['NumRotatableBonds'] = df_train['molblock'].apply(lambda x: Descriptors.NumRotatableBonds(Chem.MolFromMolBlock(x)))
-        df_val = df_val.drop(columns=['NumRotatableBonds'])
-        df_val['NumRotatableBonds'] = df_val['molblock'].apply(lambda x: Descriptors.NumRotatableBonds(Chem.MolFromMolBlock(x)))
+        try:
+            df_val = df_val.drop(columns=['NumRotatableBonds'])
+        except KeyError:
+            df_val['NumRotatableBonds'] = df_val['molblock'].apply(lambda x: Descriptors.NumRotatableBonds(Chem.MolFromMolBlock(x)))
     if scale:
         scaler = StandardScaler()
         train_X = pd.DataFrame(scaler.fit_transform(train_X), columns=features, index=df_train.index)
         val_X = pd.DataFrame(scaler.transform(val_X), columns=features, index=df_val.index)
+    if descriptor_name == 'crippen_atoms':
+        train_X = train_X.rename(columns=dict(zip(list(EMPTY_DICT.keys()), range(110))))
+        val_X = val_X.rename(columns=dict(zip(list(EMPTY_DICT.keys()), range(110))))
     return train_X, val_X

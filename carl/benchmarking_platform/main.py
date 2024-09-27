@@ -115,11 +115,13 @@ def main(descriptors_to_use, models_to_evaluate):
 
                     # Store results in the database
                     store_results_in_db(conn, descriptor, model_name, i, val_molregnos, val_y.tolist(), y_pred.tolist())
+                    y_true = val_y.tolist()
+                    molregno = val_molregnos
 
                 predictions[(descriptor, model_name)].append(y_pred)
 
-        y_list.append(val_y)
-        molregno_list.append(val_molregnos)
+        y_list.append(y_true)
+        molregno_list.append(molregno)
 
     combined_titles = []
     combined_preds = []
@@ -135,16 +137,17 @@ def main(descriptors_to_use, models_to_evaluate):
 
     # Close the database connection
     conn.close()
-
+    #assert that the lengths of the lists are the same
+    assert len(combined_titles) == len(combined_preds) == len(combined_reals) == len(combined_molregnos)
     # Save all data to a pickle to load again later
     data = {'reals_list': combined_reals, 'predictions_list': combined_preds, 'molregnos_list': combined_molregnos, 'combined_titles': combined_titles}
-    pd.to_pickle(data, 'results/crippen_atoms.pkl')
+    pd.to_pickle(data, 'results/all.pkl')
 
 
 
 if __name__ == "__main__":
-    # models_to_evaluate = ['XGBoost', 'PLS', 'Lasso', 'RandomForest', 'kNN', 'NeuralNetwork', 'MultilinearRegression', 'SVM', 'ElasticNet', 'RidgeRegression']
-    # descriptors_to_use = ['padel', 'liang_descriptors', 'RDKit_PhysChem', 'MDFP', 'MACCS', 'ECFP4_bit', 'codessa', 'ECFP4_count','carl_custom_features','fragments','Counts','crippen_atoms']
-    models_to_evaluate = ['RidgeRegression','MultilinearRegression']
-    descriptors_to_use = ['crippen_atoms']
+    models_to_evaluate = ['XGBoost', 'PLS', 'Lasso', 'RandomForest', 'kNN', 'NeuralNetwork', 'MultilinearRegression', 'SVM', 'ElasticNet', 'RidgeRegression']
+    descriptors_to_use = ['liang_descriptors', 'RDKit_PhysChem', 'MDFP', 'MACCS', 'ECFP4_bit', 'codessa', 'ECFP4_count','fragments','Counts','crippen_atoms']
+    # models_to_evaluate = ['RidgeRegression','MultilinearRegression']
+    # descriptors_to_use = ['crippen_atoms']
     main(descriptors_to_use, models_to_evaluate)
