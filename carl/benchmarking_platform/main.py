@@ -75,6 +75,9 @@ def store_results_in_db(conn, descriptor, model_name, seed, molregno, y_true, y_
 def main(descriptors_to_use, models_to_evaluate):
     conn = psycopg2.connect("dbname=cs_mdfps user=cschiebroek host=lebanon")
     logging.info("Preparing data...")
+    #log descriptors to use
+    logging.info(f"Descriptors to use: {descriptors_to_use}")
+    logging.info(f"Models to evaluate: {models_to_evaluate}")
     df = prepare_data(conn,descriptors_to_use)
     logging.info("Data prepared with selected descriptors.")
 
@@ -87,7 +90,7 @@ def main(descriptors_to_use, models_to_evaluate):
 
         for descriptor in descriptors_to_use:
             logging.info(f"Extracting features for descriptor: {descriptor}")
-            scale = descriptor not in ['ECFP4_bit', 'ECFP4_count', 'MACCS', 'crippen_atoms', 'fragments', 'Counts']
+            scale = descriptor not in ['ECFP4_bit', 'ECFP4_count', 'MACCS', 'crippen_atoms', 'fragments', 'Counts',"NumHeavyAtoms"]
             train_X, val_X = get_features(df_train, df_val, descriptor, scale)
 
             for model_name in models_to_evaluate:
@@ -141,13 +144,11 @@ def main(descriptors_to_use, models_to_evaluate):
     assert len(combined_titles) == len(combined_preds) == len(combined_reals) == len(combined_molregnos)
     # Save all data to a pickle to load again later
     data = {'reals_list': combined_reals, 'predictions_list': combined_preds, 'molregnos_list': combined_molregnos, 'combined_titles': combined_titles}
-    pd.to_pickle(data, 'results/all.pkl')
+    # pd.to_pickle(data, 'results/rdkit_count.pkl')
 
 
 
 if __name__ == "__main__":
-    models_to_evaluate = ['XGBoost', 'PLS', 'Lasso', 'RandomForest', 'kNN', 'NeuralNetwork', 'MultilinearRegression', 'SVM', 'ElasticNet', 'RidgeRegression']
-    descriptors_to_use = ['liang_descriptors', 'RDKit_PhysChem', 'MDFP', 'MACCS', 'ECFP4_bit', 'codessa', 'ECFP4_count','fragments','Counts','crippen_atoms']
-    # models_to_evaluate = ['RidgeRegression','MultilinearRegression']
-    # descriptors_to_use = ['crippen_atoms']
+    models_to_evaluate = ['MultilinearRegression']
+    descriptors_to_use = ['RDKit_PhysChem']
     main(descriptors_to_use, models_to_evaluate)

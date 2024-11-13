@@ -20,11 +20,9 @@ from descriptors.mdfp import extract_mdfp_features
 from descriptors.rdkit_physchem_decriptors import calculate_RDKit_PhysChem_descriptors
 from descriptors.fingerprints import calculate_bit_fingerprints, calculate_count_fingerprints
 from descriptors.codessa_descriptors import calculate_codessa_descriptor_df
-from descriptors.padel import calculate_Padel_descriptors
 from descriptors.polarizability import calculate_liang_descriptors_df
 from descriptors.atom_contrib import EMPTY_DICT, add_crippen_atom_counts_to_df
 
-from padelpy import from_smiles
 import os
 import pickle
 
@@ -90,6 +88,7 @@ def prepare_data(conn,descriptor_to_use):
     if 'codessa' in descriptor_to_use:
         df = calculate_codessa_descriptor_df(df, conn)
     if 'padel' in descriptor_to_use:
+        from descriptors.padel import calculate_Padel_descriptors
         df = calculate_Padel_descriptors(df, conn)
     if 'liang_descriptors' in descriptor_to_use:
         df = calculate_liang_descriptors_df(df, conn)
@@ -156,6 +155,7 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
             with open('padel_names.pkl', 'rb') as f:
                 features = pickle.load(f)
         else:
+            from padelpy import from_smiles
             features = from_smiles('CCO').keys()
             features = [feature for feature in features if feature in df_train.columns]
             #save the features to a file
