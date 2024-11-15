@@ -12,6 +12,8 @@ def get_rdkit_descriptors_from_db(conn):
     """
     df = pd.read_sql(query, conn)
     df = pd.concat([df.drop(['physchemdescriptors'], axis=1), df['physchemdescriptors'].apply(pd.Series)], axis=1)
+    #drop fr_ and IPC descriptors
+    df = df.drop([col for col in df.columns if 'Ipc' in col or 'fr_' in col], axis=1)
     return df
 
 def calc_rdkit_descriptors(mol):

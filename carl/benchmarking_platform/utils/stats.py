@@ -1,7 +1,7 @@
 # utils/statistics.py
 
 import numpy as np
-from sklearn.metrics import mean_absolute_error, mean_squared_error, median_absolute_error
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error, median_absolute_error
 import scipy.stats as stats
 
 def get_stats(x, y, thresholds):
@@ -25,7 +25,7 @@ def get_stats(x, y, thresholds):
     - If thresholds is a single float, a single EBO value will be calculated.
     - If thresholds is a list of floats, multiple EBO values will be calculated, each corresponding to a threshold in the list.
     """
-    RMSE = mean_squared_error(np.array(x), np.array(y), squared=False)
+    RMSE = root_mean_squared_error(np.array(x), np.array(y))
     MAE = mean_absolute_error(np.array(x), np.array(y))
     #if tresholds is a list, iterate. otherwise use the one value
     if isinstance(thresholds, list):
@@ -33,6 +33,9 @@ def get_stats(x, y, thresholds):
     else:
         EBO = np.mean(np.abs(np.array(x) - np.array(y)) < thresholds)
     KT = stats.kendalltau(x, y)[0]
+    if np.isnan(KT):
+        #raise error, and print out the x and y values
+        raise ValueError(f'Kendall Tau is NaN. x: {x}, y: {y}')
     median_AE = median_absolute_error(np.array(x), np.array(y))
 
     #return dict

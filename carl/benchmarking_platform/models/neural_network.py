@@ -36,3 +36,15 @@ class NeuralNetworkModel:
         y_pred = self.model.predict(X_test)
 
         return y_pred.flatten()
+
+class NeuralNetworkModelGregstyle(NeuralNetworkModel):
+    def __init__(self, input_shape):
+        M = input_shape[0]
+        self.model = models.Sequential([
+            layers.Dense(M, activation='relu', input_shape=input_shape),
+            layers.Dense(M//4, activation='relu'),
+            layers.Dense(M//2, activation='relu'),
+            layers.Dense(1)
+        ])
+        self.model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+        

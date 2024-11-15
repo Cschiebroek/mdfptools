@@ -128,7 +128,8 @@ def density_plots(reals_list, predictions_list, molregnos_list, print_stats=True
         plt.show()
 
 
-def compute_and_plot_statistic(data_path, statistic_name, thresholds, model_order, descriptor_order):
+def compile_metrics_dataframe(data_path, thresholds=[1], 
+                              statistic_names=['RMSE', 'MAE', 'KendallTau', 'MedianAE', 'Error_below_1']):
     # Load the saved data
     data = pd.read_pickle(data_path)
 
@@ -325,3 +326,86 @@ def density_plot_single(reals_list, predictions_list, molregnos_list, print_stat
         plt.savefig(f'{name}.png', dpi=800, bbox_inches='tight')
     else:
         plt.show()
+
+import pandas as pd
+import numpy as np
+from scipy import stats
+
+import pandas as pd
+import numpy as np
+from scipy import stats
+
+def compile_metrics_dataframe(data_path, thresholds=[1], 
+                              statistic_names=['RMSE', 'MAE', 'KendallTau', 'MedianAE', 'Error_below_1'],train_set='full_range'):
+    """
+    Compile a DataFrame with the mean and 90% confidence intervals for specified metrics.
+
+    Parameters:
+    data_path (str): Path to the pickled data file.
+    thresholds (list): List of thresholds for calculating the fraction of errors below certain values.
+    statistic_names (list): List of metric names to include in the DataFrame.
+
+    Returns:
+    pd.DataFrame: A DataFrame with metrics, mean values, and confidence intervals.
+    """
+    # Load the saved data
+    data = pd.read_pickle(data_path)
+
+    # Extract relevant data
+    reals_list = data['reals_list']
+    if train_set=='full_range':
+        predictions_list = data['predictions_train_full_range']
+    elif train_set=='mid_range':
+        predictions_list = data['predictions_train_mid_range']
+    combined_titles = data['combined_titles']
+
+    # Initialize a dictionary to hold metric data for each combination
+    all_stats = {stat: [] for stat in statistic_names}
+
+    # Calculate statistics for each combination
+    for real, pred, title in zip(reals_list, predictions_list, combined_titles):
+        metric_data = {stat: [] for stat in statistic_names}
+        for real_vals, pred_vals in zip(real, pred):
+            stat_dict = get_stats(real_vals, pred_vals, thresholds)
+            for stat in statistic_names:
+                metric_data[stat].append(stat_dict[stat])
+        
+        # Append the means and confidence intervals for each metric
+        for stat in statistic_names:
+            mean_val = np.mean(metric_data[stat])
+            if stat == 'KendallTau':
+                # Check for constant or insufficient data
+                if len(real_vals) < 2 or len(set(real_vals)) == 1 or len(set(pred_vals)) == 1:
+                    print(f'Warning: Kendall Tau is NaN due to constant or insufficient data.')
+                    print(f'Real values: {real_vals}')
+                    print(f'Predicted values: {pred_vals}')
+                    mean_val = np.nan  # Explicitly set to NaN for this case
+                elif np.isnan(mean_val):
+                    raise ValueError(f'Kendall Tau is NaN. x: {real_vals}, y: {pred_vals}')
+
+            ci_low, ci_high = stats.norm.interval(0.90, loc=mean_val, scale=stats.sem(metric_data[stat]))
+
+            all_stats[stat].append({
+                'Model': title.split(' (')[0],
+                'Descriptor': title.split(' (')[1].rstrip(')'),
+                'Mean': mean_val,
+                'CI_Low': ci_low,
+                'CI_High': ci_high
+            })
+
+    # Convert the collected data to a DataFrame
+    df_list = []
+    for stat, stat_data in all_stats.items():
+        df = pd.DataFrame(stat_data)
+        df['Metric'] = stat
+        df_list.append(df)
+
+    # Combine all metrics into a single DataFrame
+    combined_df = pd.concat(df_list, ignore_index=True)
+    # Reorder the columns for readability
+    combined_df = combined_df[['Model', 'Descriptor', 'Metric', 'Mean', 'CI_Low', 'CI_High']]
+
+    # Sort the DataFrame by descriptor and model for better readability
+    combined_df = combined_df.sort_values(['Descriptor', 'Model', 'Metric']).reset_index(drop=True)
+
+    return combined_df

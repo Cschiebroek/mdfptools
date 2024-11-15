@@ -2,8 +2,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 
 class RandomForestModel:
-    def __init__(self, max_depth=10, n_estimators=100, random_state=42):
-        # Initialize the RandomForestRegressor with a specified max_depth
+    def __init__(self, max_depth=None, n_estimators=100, random_state=42,max_features='sqrt'):
         self.model = RandomForestRegressor(max_depth=max_depth, n_estimators=n_estimators, random_state=random_state,max_features='sqrt')
     
     def train(self, X_train, y_train):

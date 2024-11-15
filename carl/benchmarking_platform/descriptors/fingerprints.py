@@ -1,6 +1,7 @@
 from rdkit.Chem import AllChem, MACCSkeys
 from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator
+import logging
 
 def calculate_bit_fingerprints(df, fingerprint_type='maccs', fpSize=2048, radius=2):
     """
@@ -8,9 +9,9 @@ def calculate_bit_fingerprints(df, fingerprint_type='maccs', fpSize=2048, radius
 
     Parameters:
     - df: Pandas DataFrame containing a column 'molblock'.
-    - fingerprint_type: Type of fingerprint to calculate. Options: 'maccs', 'ecfp4', 'rdkitfp', 'atompair', 'torsion'.
+    - fingerprint_type: Type of fingerprint to calculate. Options: 'maccs', 'morgan', 'rdkitfp', 'atompair', 'torsion'.
     - fpSize: Size of the fingerprint (default 2048).
-    - radius: Radius for Morgan/ECFP fingerprints (default 2).
+    - radius: Radius for Morgan fingerprints (default 2).
 
     Returns:
     - df: DataFrame with a new column containing the fingerprints.
@@ -22,7 +23,7 @@ def calculate_bit_fingerprints(df, fingerprint_type='maccs', fpSize=2048, radius
     # Select the appropriate fingerprint generator
     if fingerprint_type == 'maccs':
         fps = [MACCSkeys.GenMACCSKeys(mol) for mol in ms]
-    elif fingerprint_type == 'ecfp4':
+    elif fingerprint_type == 'morgan':
         mfpgen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=fpSize)
         fps = [mfpgen.GetFingerprint(mol) for mol in ms]
     elif fingerprint_type == 'rdkitfp':
@@ -36,7 +37,10 @@ def calculate_bit_fingerprints(df, fingerprint_type='maccs', fpSize=2048, radius
         fps = [ttgen.GetFingerprint(mol) for mol in ms]
     else:
         raise ValueError(f"Unknown fingerprint type: {fingerprint_type}")
+    if fingerprint_type == 'morgan':
+        fingerprint_type = fingerprint_type + "_" + str(radius)
     fingerprint_type = fingerprint_type + '_bit' if fingerprint_type != 'maccs' else fingerprint_type
+    logging.info(f"Fingerprint type: {fingerprint_type}")
     df[fingerprint_type] = fps
     return df
 
@@ -46,9 +50,9 @@ def calculate_count_fingerprints(df, fingerprint_type='maccs', fpSize=2048, radi
 
     Parameters:
     - df: Pandas DataFrame containing a column 'molblock'.
-    - fingerprint_type: Type of fingerprint to calculate. Options: 'maccs', 'ecfp4', 'rdkitfp', 'atompair', 'torsion'.
+    - fingerprint_type: Type of fingerprint to calculate. Options: 'maccs', 'morgan', 'rdkitfp', 'atompair', 'torsion'.
     - fpSize: Size of the fingerprint (default 2048).
-    - radius: Radius for Morgan/ECFP fingerprints (default 2).
+    - radius: Radius for Morgan fingerprints (default 2).
 
     Returns:
     - df: DataFrame with a new column containing the fingerprints.
@@ -60,7 +64,7 @@ def calculate_count_fingerprints(df, fingerprint_type='maccs', fpSize=2048, radi
     # Select the appropriate fingerprint generator
     if fingerprint_type == 'maccs':
         fps = [MACCSkeys.GenMACCSKeys(mol) for mol in ms]
-    elif fingerprint_type == 'ecfp4':
+    elif fingerprint_type == 'morgan':
         mfpgen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=fpSize)
         fps = [mfpgen.GetCountFingerprint(mol) for mol in ms]
     elif fingerprint_type == 'rdkitfp':

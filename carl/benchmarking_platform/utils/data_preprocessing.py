@@ -82,9 +82,9 @@ def prepare_data(conn,descriptor_to_use):
     if 'MACCS' in descriptor_to_use:
         df = calculate_bit_fingerprints(df, 'maccs')
     if 'ECFP4_bit' in descriptor_to_use:
-        df = calculate_bit_fingerprints(df, 'ecfp4')
+        df = calculate_bit_fingerprints(df, 'morgan')
     if 'ECFP4_count' in descriptor_to_use:
-        df = calculate_count_fingerprints(df, 'ecfp4')
+        df = calculate_count_fingerprints(df, 'morgan')
     if 'codessa' in descriptor_to_use:
         df = calculate_codessa_descriptor_df(df, conn)
     if 'padel' in descriptor_to_use:
@@ -94,6 +94,12 @@ def prepare_data(conn,descriptor_to_use):
         df = calculate_liang_descriptors_df(df, conn)
     if 'crippen_atoms' in descriptor_to_use:
         df = add_crippen_atom_counts_to_df(df)
+    if 'mfp0' in descriptor_to_use:
+        logging.info("Calculating mfp0 fingerprints")
+        df = calculate_bit_fingerprints(df, fingerprint_type='morgan', fpSize=2048, radius=0)
+    if 'mfp3' in descriptor_to_use:
+        logging.info("Calculating mfp3 fingerprints")
+        df = calculate_bit_fingerprints(df, fingerprint_type='morgan', fpSize=2048, radius=3)
     logging.info(df.columns)
     logging.info("Data loaded and descriptors calculated, dropping NaNs...")
     # Drop rows with any NaNs
@@ -137,6 +143,18 @@ def preprocess_data(df, seed):
 
     return train_molregnos, val_molregnos, train_y, val_y, df_train, df_val
 
+def preprocess_data_kfold(df, train_index, test_index):
+    logging.info("Splitting data into training and testing sets...")   
+    train_molregnos = df['molregno'].iloc[train_index].tolist()
+    val_molregnos = df['molregno'].iloc[test_index].tolist()
+    df_train = df[df['molregno'].isin(train_molregnos)]
+    df_val = df[df['molregno'].isin(val_molregnos)]
+    
+    train_y = df_train['vp_log10_pa'].tolist()
+    val_y = df_val['vp_log10_pa'].tolist()
+
+    return train_molregnos, val_molregnos, train_y, val_y, df_train, df_val
+
 def get_features_from_config(descriptor_name):
     with open('configs/descriptors.json', 'r') as file:
         config = json.load(file)
@@ -149,6 +167,8 @@ def get_features_from_config(descriptor_name):
 def get_features(df_train, df_val, descriptor_name, scale=False):
     if descriptor_name == 'RDKit_PhysChem':
         features = [d[0] for d in Descriptors._descList if d[0] in df_train.columns]
+        #drop IPC and fr_ descriptors
+        features = [feature for feature in features if 'IPC' not in feature and 'fr_' not in feature]
 
     elif descriptor_name == 'padel':
         if os.path.exists('padel_names.pkl'):
@@ -179,7 +199,7 @@ def get_features(df_train, df_val, descriptor_name, scale=False):
     train_X = df_train[features].apply(pd.to_numeric, errors='coerce')
     val_X = df_val[features].apply(pd.to_numeric, errors='coerce')        
 
-    if descriptor_name == 'ECFP4_bit' or descriptor_name == 'ECFP4_count' or descriptor_name == 'MACCS':
+    if descriptor_name == 'ECFP4_bit' or descriptor_name == 'ECFP4_count' or descriptor_name == 'MACCS' or descriptor_name == 'mfp0' or descriptor_name == 'mfp3':
         train_X = [list(x) for x in train_X]
         val_X = [list(x) for x in val_X]
 
