@@ -1,11 +1,10 @@
 # models/xgboost.py
 import xgboost as xgb
 from sklearn.metrics import mean_squared_error, r2_score
-
+DEFAULT_PARAMS = {"objective": "reg:squarederror", "n_estimators": 300, "max_depth": 3}
 class XGBoostModel:
-    def __init__(self, params=None):
-        self.params = params if params else {"objective": "reg:squarederror"}
-        self.model = xgb.XGBRegressor(**self.params)
+    def __init__(self, params=DEFAULT_PARAMS):
+        self.model = xgb.XGBRegressor(**params)
     
     def train(self, X_train, y_train):
         self.model.fit(X_train, y_train)

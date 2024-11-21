@@ -36,6 +36,9 @@ class NeuralNetworkModel:
         y_pred = self.model.predict(X_test)
 
         return y_pred.flatten()
+    
+    def set_model_seed(self, seed):
+        tf.random.set_seed(seed)
 
 class NeuralNetworkModelGregstyle(NeuralNetworkModel):
     def __init__(self, input_shape):

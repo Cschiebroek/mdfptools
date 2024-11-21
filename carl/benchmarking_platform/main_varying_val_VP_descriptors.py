@@ -14,7 +14,7 @@ import numpy as np
 
 # Add the new model to the dictionary of available models
 model_classes = {
-    'MLP': NeuralNetworkModel,
+    'MLP': NeuralNetworkModelGregstyle,
     'XGB': XGBoostModel,
     'RF': RandomForestModel,
     'RF_SHORT': RandomForestModel,
@@ -27,6 +27,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 descriptor_functions = {
     'Counts': extract_mdfp_features,
     'RDKit_PhysChem': calculate_RDKit_PhysChem_descriptors,
+    'MDFP': extract_mdfp_features
 }
 
 
@@ -36,7 +37,7 @@ def main(descriptors_to_use, models_to_evaluate):
     #log descriptors to use
     logging.info(f"Descriptors to use: {descriptors_to_use}")
     logging.info(f"Models to evaluate: {models_to_evaluate}")
-    df = prepare_data(conn,list(descriptors_to_use) + ['MDFP'])
+    df = prepare_data(conn,list(set(list(descriptors_to_use) + ['MDFP', 'RDKit_PhysChem'])))
     logging.info("Data prepared with selected descriptors.")
     df_mid_range = df[(df['vp_log10_pa'] > 1) & (df['vp_log10_pa'] < 8)]
 
@@ -73,8 +74,8 @@ def main(descriptors_to_use, models_to_evaluate):
                 
                 if model_name == 'MLP':
                     # try:
-                    model_full_range = NeuralNetworkModel(input_shape=(train_X_full_range.shape[1],))
-                    model_mid_range = NeuralNetworkModel(input_shape=(train_X_mid_range.shape[1],))
+                    model_full_range = NeuralNetworkModelGregstyle(input_shape=(train_X_full_range.shape[1],))
+                    model_mid_range = NeuralNetworkModelGregstyle(input_shape=(train_X_mid_range.shape[1],))
                     # except AttributeError:
                     #     model_full_range = NeuralNetworkModelGregstyle(input_shape=(len(train_X_full_range[0]),))
                     #     model_mid_range = NeuralNetworkModelGregstyle(input_shape=(len(train_X_mid_range[0]),))
@@ -96,19 +97,58 @@ def main(descriptors_to_use, models_to_evaluate):
                 y_pred_train_set_full_range = model_full_range.predict(train_X_full_range)
                 y_pred_train_set_mid_range = model_mid_range.predict(train_X_mid_range)
 
-                #assert ys are not all the same
-                try:
-                    assert not all(y_pred_full_range == y_pred_full_range[0])
-                    assert not all(y_pred_mid_range == y_pred_mid_range[0])
-                except AssertionError:
-                    logging.ERROR(f"Predictions are all the same for split {len(y_list)+1}, model {model_name}, descriptor {descriptor}")
-                #same for ys
-                try:
-                    #val_y is a list, convert to numpy array
-                    vall_y_array = np.array(val_y)
-                    assert not all(vall_y_array == vall_y_array[0])
-                except AssertionError:
-                    logging.ERROR(f"Y values are all the same for split {len(y_list)+1}, model {model_name}, descriptor {descriptor}")
+
+
+                # Check for constant ground truth values
+                if len(val_y) == 0 or len(np.unique(val_y)) == 1:
+                    logging.error(f"Y values are all the same for split {len(y_list)+1}, model {model_name}, descriptor {descriptor}. Y values: {val_y}")
+
+                max_retries = 3  # Maximum number of retries to avoid infinite loops
+                retry_count = 0
+
+                # Check for constant predictions in full range
+                while (len(y_pred_full_range) == 0 or len(np.unique(y_pred_full_range)) == 1) and retry_count < max_retries:
+                    logging.error(f"Predictions are all the same for split {len(y_list)+1}, model {model_name}, descriptor {descriptor}. Predictions: {y_pred_full_range}")
+                    retry_count += 1
+                    logging.info(f"Retrying model training for split {len(y_list)+1}, retry {retry_count}/{max_retries}.")
+
+                    if model_name == 'MLP':
+                        model_full_range = NeuralNetworkModelGregstyle(input_shape=(train_X_full_range.shape[1],))
+                    elif model_name == 'RF_SHORT':
+                        model_full_range = model_class(max_depth=5)
+                    else:
+                        model_full_range = model_class()
+
+                    model_full_range.train(train_X_full_range, train_y_full_range)
+                    y_pred_full_range = model_full_range.predict(val_X_full_range)
+
+                if retry_count == max_retries:
+                    logging.error(f"Exceeded maximum retries for split {len(y_list)+1}, model {model_name}, descriptor {descriptor}. Skipping this combination.")
+                    continue
+
+                # Reset retry count for mid range
+                retry_count = 0
+
+                # Check for constant predictions in mid range
+                while (len(y_pred_mid_range) == 0 or len(np.unique(y_pred_mid_range)) == 1) and retry_count < max_retries:
+                    logging.error(f"Predictions are all the same for split {len(y_list)+1}, model {model_name}, descriptor {descriptor}. Predictions: {y_pred_mid_range}")
+                    retry_count += 1
+                    logging.info(f"Retrying model training for split {len(y_list)+1}, retry {retry_count}/{max_retries}.")
+
+                    if model_name == 'MLP':
+                        model_mid_range = NeuralNetworkModelGregstyle(input_shape=(train_X_mid_range.shape[1],))
+                    elif model_name == 'RF_SHORT':
+                        model_mid_range = model_class(max_depth=5)
+                    else:
+                        model_mid_range = model_class()
+
+                    model_mid_range.train(train_X_mid_range, train_y_mid_range)
+                    y_pred_mid_range = model_mid_range.predict(val_X_mid_range)
+
+                if retry_count == max_retries:
+                    logging.error(f"Exceeded maximum retries for split {len(y_list)+1}, model {model_name}, descriptor {descriptor}. Skipping this combination.")
+                    continue
+                        
 
                 y_true = val_y
                 molregno = val_molregnos
@@ -161,11 +201,11 @@ def main(descriptors_to_use, models_to_evaluate):
     assert len(combined_titles) == len(combined_reals) == len(combined_molregnos) == len(combined_preds_full_range) == len(combined_preds_mid_range)
     # Save all data to a pickle to load again later
     data_test = {'reals_list': combined_reals, 'molregnos_list': combined_molregnos, 'combined_titles': combined_titles, 'predictions_train_full_range': combined_preds_full_range, 'predictions_train_mid_range': combined_preds_mid_range}
-    pd.to_pickle(data_test, 'results/test_set_overfitting_check_different_train_ranges_Counts.pkl')
+    pd.to_pickle(data_test, 'results/test_set_mdfp_counts_physchem.pkl')
     data_train_full = {'reals_list': combined_reals_train_full, 'molregnos_list': combined_molregnos_train_full, 'combined_titles': combined_titles, 'predictions_train_full_range': combined_preds_on_train_set_full_range}
-    pd.to_pickle(data_train_full, 'results/train_set_full_overfitting_check_different_train_ranges_Counts.pkl')
+    pd.to_pickle(data_train_full, 'results/train_set_full_mdfp_counts_physchem.pkl')
     data_train_mid = {'reals_list': combined_reals_train_mid, 'molregnos_list': combined_molregnos_train_mid, 'combined_titles': combined_titles, 'predictions_train_mid_range': combined_preds_on_train_set_mid_range}
-    pd.to_pickle(data_train_mid, 'results/train_set_mid_overfitting_check_different_train_ranges_Counts.pkl')
+    pd.to_pickle(data_train_mid, 'results/train_set_mid_mdfp_counts_physchem.pkl')
 
 if __name__ == "__main__":
     models_to_evaluate = model_classes.keys()
